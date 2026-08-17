@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  privacy-guard:
+    name: 隱私守門：不得出現連線或儲存 API
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan for network and storage APIs
+        run: |
+          if grep -nE "fetch\(|XMLHttpRequest|sendBeacon|new WebSocket|new EventSource|localStorage\.|sessionStorage\.|indexedDB\.|caches\.|document\.cookie" index.html; then
+            echo "::error file=index.html::Found a network or storage API. This project must not transmit or persist data."
+            exit 1
+          fi
+          echo "Clean: no network or storage APIs found."
+      - name: Verify the CSP still blocks outbound connections
+        run: |
+          grep -q "connect-src 'none'" index.html || {
+            echo "::error file=index.html::The connect-src 'none' directive is missing from the CSP."
+            exit 1
+          }
+          echo "CSP intact."
+      - name: Verify no external resources are referenced
+        run: |
+          # 只擋「會自動發出請求」的引用：script/img/iframe 的 src、CSS 的 url()、
+          # 以及 <link> 的外部 href。<a href> 是使用者主動點擊才會離開本頁，
+          # 不會在載入時產生任何請求，因此允許。
+          if grep -nE '(src=|@import|url\()["'"'"']?https?://' index.html; then
+            echo "::error file=index.html::External resource load found. Everything must be self-contained."
+            exit 1
+          fi
+          if grep -nE '<link[^>]*href="https?://' index.html; then
+            echo "::error file=index.html::External <link> found. Icons and styles must be inlined."
+            exit 1
+          fi
+          echo "Self-contained: no external resource loads."
+
+      - name: Verify outbound links cannot leak a referrer
+        run: |
+          grep -q 'name="referrer" content="no-referrer"' index.html || {
+            echo "::error file=index.html::The no-referrer meta tag is missing."
+            exit 1
+          }
+          # 每個外連都必須有 rel，避免 window.opener 與 referrer 外洩
+          total=$(grep -o '<a href="https\?://' index.html | wc -l)
+          safe=$(grep -o '<a href="https\?://[^>]*rel="noopener noreferrer"' index.html | wc -l)
+          if [ "$total" != "$safe" ]; then
+            echo "::error file=index.html::Found $((total - safe)) outbound link(s) without rel=\"noopener noreferrer\"."
+            exit 1
+          fi
+          echo "All $total outbound link(s) are referrer-safe."
