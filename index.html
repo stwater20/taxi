@@ -235,6 +235,10 @@ footer a:focus-visible{outline:2px solid var(--taxi);outline-offset:3px;border-r
             <p class="hint">春節期間各縣市約加收 30–50 元；台南、高雄、屏東在颱風假時另加 50 元。實際金額看當年公告。</p></div>
         </div>
         <div class="switch">
+          <input type="checkbox" id="snd" checked>
+          <label for="snd" style="margin:0;font-size:12.5px;letter-spacing:0;color:inherit">跳表時發出聲音</label>
+        </div>
+        <div class="switch">
           <input type="checkbox" id="wake" checked>
           <label for="wake" style="margin:0;font-size:12.5px;letter-spacing:0;color:inherit">計費期間保持螢幕開啟</label>
         </div>
@@ -414,6 +418,57 @@ function rate() {
   };
 }
 
+
+/* ── 音效 ─────────────────────────────────────────────────
+   全部用 Web Audio 即時合成。不載入任何音檔，因為那會產生
+   網路請求，這個專案不做這件事。                              */
+let ctx = null;
+function soundOn() { return document.getElementById("snd").checked; }
+
+function audioReady() {
+  if (!soundOn()) return null;
+  try {
+    // AudioContext 必須在使用者手勢之後才能建立／恢復
+    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (ctx.state === "suspended") ctx.resume();
+    return ctx;
+  } catch (_) { return null; }
+}
+
+// 跳表的「喀」：真的計程表是繼電器的機械聲，用一小段衰減噪音做
+function clickSound(freq, level) {
+  const c = audioReady(); if (!c) return;
+  const len = Math.floor(c.sampleRate * 0.035);
+  const buf = c.createBuffer(1, len, c.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 7);
+  const src = c.createBufferSource(); src.buffer = buf;
+  const bp = c.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = freq; bp.Q.value = 4;
+  const g = c.createGain();
+  g.gain.setValueAtTime(level, c.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + 0.05);
+  src.connect(bp).connect(g).connect(c.destination);
+  src.start();
+}
+const tickFare = () => clickSound(2400, 0.30);   // 續程跳表：清脆
+const tickWait = () => clickSound(1100, 0.22);   // 延滯跳表：低沉一點，聽得出差別
+
+// 開始／結束的提示音
+function toneSound(from, to, dur, level) {
+  const c = audioReady(); if (!c) return;
+  const o = c.createOscillator(), g = c.createGain();
+  o.type = "triangle";
+  o.frequency.setValueAtTime(from, c.currentTime);
+  o.frequency.exponentialRampToValueAtTime(to, c.currentTime + dur);
+  g.gain.setValueAtTime(0.0001, c.currentTime);
+  g.gain.exponentialRampToValueAtTime(level, c.currentTime + 0.015);
+  g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + dur);
+  o.connect(g).connect(c.destination);
+  o.start(); o.stop(c.currentTime + dur + 0.02);
+}
+const startSound = () => toneSound(660, 990, 0.16, 0.14);
+const stopSound  = () => toneSound(760, 380, 0.34, 0.14);
+
 /* ── 行程狀態（全部只存在記憶體） ──────────────────────── */
 const MAX_ACCURACY = 45;     // 公尺，超過就丟掉這筆定位
 const MAX_SPEED    = 60;     // 公尺/秒，超過視為跳點
@@ -425,6 +480,7 @@ let watchId = null, ticker = null, wakeLock = null;
 let startedAt = 0, endedAt = 0;
 let meters = 0, idleSec = 0, samples = 0;
 let last = null, lastFixAt = 0, curSpeed = 0, nightApplied = false, lastFare = 0;
+let lastStepUnits = 0, lastWaitUnits = 0;
 
 function haversine(a, b) {
   const R = 6371008.8, rad = Math.PI / 180;
@@ -463,9 +519,15 @@ function update() {
     if (lastFare) {
       const f = document.getElementById("fare");
       f.classList.remove("tick"); void f.offsetWidth; f.classList.add("tick");
+      if (state === "running") {
+        if (b.waitUnits > lastWaitUnits) tickWait();
+        else if (b.stepUnits > lastStepUnits) tickFare();
+      }
     }
     lastFare = b.total;
   }
+  lastStepUnits = b.stepUnits;
+  lastWaitUnits = b.waitUnits;
 }
 function signal(acc) {
   const el = document.getElementById("sig");
@@ -530,6 +592,7 @@ function start() {
   state = "running";
   startedAt = Date.now();
   meters = 0; idleSec = 0; samples = 0; last = null; lastFixAt = 0; curSpeed = 0; lastFare = 0;
+  lastStepUnits = 0; lastWaitUnits = 0;
   const r0 = rate();
   nightApplied = isNight(startedAt) && (r0.night > 0 || r0.nightPct > 0);
 
@@ -541,6 +604,7 @@ function start() {
   signal(null);
   renderControls();
   keepAwake(true);
+  startSound();
 
   watchId = navigator.geolocation.watchPosition(onFix, onFixError, {
     enableHighAccuracy: true, maximumAge: 1000, timeout: 15000
@@ -569,12 +633,14 @@ function stop() {
   renderControls();
   update();
   printReceipt();
+  stopSound();
 }
 
 function reset() {
   state = "idle";
   meters = 0; idleSec = 0; samples = 0; startedAt = 0; endedAt = 0;
   last = null; curSpeed = 0; nightApplied = false; lastFare = 0;
+  lastStepUnits = 0; lastWaitUnits = 0;
   document.getElementById("receipt").hidden = true;
   document.getElementById("receipt").textContent = "";
   document.getElementById("err").hidden = true;
