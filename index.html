@@ -5,22 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
 <meta name="color-scheme" content="dark">
-<meta name="description" content="用手機 GPS 跳表估算計程車車資。純前端運算，不連線、不記錄、不上傳任何位置資料。">
+<meta name="description" content="手機變成台灣計程車跳表：紅色 LED、空車燈、跳表嗶聲、語音播報、列印收據。純前端運算，不連線、不記錄、不上傳任何位置資料。">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23FFD400'/%3E%3Crect x='5' y='10' width='22' height='12' rx='2.5' fill='%230E1014'/%3E%3Crect x='8.5' y='13.5' width='4' height='5' fill='%23FF9F1C'/%3E%3Crect x='14' y='13.5' width='4' height='5' fill='%23FF9F1C'/%3E%3Crect x='19.5' y='13.5' width='4' height='5' fill='%23FF9F1C'/%3E%3C/svg%3E">
-<meta name="theme-color" content="#0E1014">
-<title>跳表 · 計程車車資估算</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23FFD400'/%3E%3Crect x='5' y='10' width='22' height='12' rx='2.5' fill='%230E1014'/%3E%3Crect x='8.5' y='13.5' width='4' height='5' fill='%23FF3B24'/%3E%3Crect x='14' y='13.5' width='4' height='5' fill='%23FF3B24'/%3E%3Crect x='19.5' y='13.5' width='4' height='5' fill='%23FF3B24'/%3E%3C/svg%3E">
+<meta name="theme-color" content="#0B0C0E">
+<title>跳表 · 計程車計費表</title>
 <style>
 :root{
-  --asphalt:#0E1014;
-  --case:#191C21;
-  --case-hi:#22262C;
-  --well:#06070A;
-  --amber:#FF9F1C;
-  --amber-off:rgba(255,159,28,.075);
+  --asphalt:#0B0C0E;
+  --plastic:#1B1D21;
+  --plastic-hi:#2A2D33;
+  --glass:#0C0303;
+  --led:#FF3B24;
+  --led-off:rgba(255,59,36,.075);
+  --led-glow:rgba(255,59,36,.6);
   --taxi:#FFD400;
-  --paper:#EFEAE0;
-  --ink:#22201C;
+  --paper:#F4F1EA;
+  --ink:#1E1C19;
   --edge:rgba(255,255,255,.09);
   --mute:#7C848F;
   --font-ui:-apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif;
@@ -33,87 +34,155 @@ body{
   color:#E7EAEE;
   font-family:var(--font-ui);
   -webkit-text-size-adjust:100%;
+  -webkit-tap-highlight-color:transparent;
   padding:14px 14px calc(28px + env(safe-area-inset-bottom));
   display:flex;justify-content:center;
 }
-.shell{width:100%;max-width:440px}
+.shell{width:100%;max-width:460px}
 
-/* ── 頂燈列 ─────────────────────────── */
-.lampbar{
-  display:flex;align-items:center;gap:9px;
-  padding:11px 14px;margin-bottom:10px;
-  background:var(--case);border:1px solid var(--edge);border-radius:13px;
+/* ── 擋風玻璃的「空車」燈 ───────────── */
+.flag{
+  display:flex;justify-content:center;margin:0 auto 12px;
 }
-.lamp{width:9px;height:9px;border-radius:50%;background:#4A515B;flex:none;transition:background .2s,box-shadow .2s}
-.lampbar[data-state="running"] .lamp{background:var(--taxi);box-shadow:0 0 12px rgba(255,212,0,.75);animation:breathe 2.4s ease-in-out infinite}
-.lampbar[data-state="done"] .lamp{background:var(--amber);box-shadow:0 0 10px rgba(255,159,28,.5)}
-@keyframes breathe{50%{opacity:.42}}
-.lamptext{font-size:13px;font-weight:600;letter-spacing:.16em}
-.sig{margin-left:auto;font-family:var(--font-mono);font-size:10.5px;color:var(--mute);letter-spacing:.03em;text-align:right}
+.flag span{
+  font-size:30px;font-weight:900;letter-spacing:.32em;padding:6px 10px 6px 20px;
+  border-radius:8px;border:2px solid #2B1110;background:#120606;
+  color:#3A1612;transition:color .25s,text-shadow .25s,border-color .25s;
+}
+.flag[data-on="1"] span{
+  color:#FF4A30;border-color:#5A1A14;
+  text-shadow:0 0 6px rgba(255,74,48,.9),0 0 22px rgba(255,74,48,.55);
+}
 
 /* ── 表頭本體 ───────────────────────── */
-.meter{background:var(--case);border:1px solid var(--edge);border-radius:18px;overflow:hidden}
-.well{
-  background:var(--well);
-  border-bottom:1px solid var(--edge);
-  padding:22px 16px 15px;
-  box-shadow:inset 0 2px 22px rgba(0,0,0,.85);
+.unit{
+  position:relative;
+  background:linear-gradient(180deg,#2B2E33 0%,#1B1D21 38%,#141518 100%);
+  border:1px solid #33363C;border-radius:16px;
+  padding:12px 12px 14px;
+  box-shadow:0 18px 40px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.08);
 }
-.fare{display:flex;align-items:flex-end;justify-content:center;gap:9px;transform:skewX(-5deg)}
-.cur{
-  font-family:var(--font-mono);font-size:15px;color:var(--amber);
-  opacity:.62;letter-spacing:.06em;padding-bottom:9px;transform:skewX(5deg)
+.screw{position:absolute;width:9px;height:9px;border-radius:50%;
+  background:radial-gradient(circle at 35% 35%,#6B7079,#2A2C30 70%);box-shadow:0 1px 1px rgba(0,0,0,.6)}
+.screw::after{content:"";position:absolute;left:1.5px;right:1.5px;top:4px;height:1px;background:#15161A;transform:rotate(35deg)}
+.screw.tl{left:7px;top:7px}.screw.tr{right:7px;top:7px}.screw.bl{left:7px;bottom:7px}.screw.br{right:7px;bottom:7px}
+
+.brand{display:flex;align-items:center;justify-content:space-between;padding:0 12px 9px;
+  font-size:10.5px;letter-spacing:.32em;color:#A9AFB8;font-weight:700}
+.brand .model{font-family:var(--font-mono);letter-spacing:.12em;color:#6C727C;font-weight:500}
+
+.glass{
+  background:radial-gradient(120% 140% at 50% 0%,#1A0605 0%,var(--glass) 60%);
+  border:1px solid #000;border-radius:8px;
+  box-shadow:inset 0 3px 18px rgba(0,0,0,.95),0 1px 0 rgba(255,255,255,.06);
+  padding:10px 12px 12px;
+  position:relative;overflow:hidden;
 }
-.digits{display:flex;gap:5px}
-.digits svg{width:38px;height:66px;display:block}
-.seg{fill:var(--amber-off)}
-.seg.on{fill:var(--amber);filter:drop-shadow(0 0 5px rgba(255,159,28,.55))}
-.fare.tick .seg.on{animation:flash .22s ease-out}
-@keyframes flash{0%{filter:drop-shadow(0 0 15px rgba(255,159,28,1))}}
+.glass::before{ /* 壓克力反光 */
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(115deg,rgba(255,255,255,.055) 0%,rgba(255,255,255,0) 32%);
+}
+.status{display:flex;gap:12px;justify-content:flex-start;flex-wrap:wrap;margin-bottom:6px}
+.st{display:flex;align-items:center;gap:5px;font-size:10.5px;letter-spacing:.14em;color:#5A2620;font-weight:700}
+.st i{width:7px;height:7px;border-radius:50%;background:#2A0E0B;display:block}
+.st.on{color:#FF6A52}
+.st.on i{background:var(--led);box-shadow:0 0 8px var(--led-glow)}
+.st.on.g{color:#5CFF8A}.st.on.g i{background:#3BFF6E;box-shadow:0 0 8px rgba(59,255,110,.6)}
+.st.on.y{color:#FFC04A}.st.on.y i{background:#FFB020;box-shadow:0 0 8px rgba(255,176,32,.6)}
 
-.readouts{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;margin-top:20px;background:var(--edge)}
-.readouts div{background:var(--well);padding:9px 4px;text-align:center}
-.readouts b{display:block;font-family:var(--font-mono);font-size:17px;font-weight:500;color:var(--amber);opacity:.9;letter-spacing:.01em}
-.readouts span{display:block;margin-top:3px;font-size:9.5px;color:var(--mute);letter-spacing:.13em}
-.note{margin-top:13px;text-align:center;font-family:var(--font-mono);font-size:11px;color:var(--mute);min-height:14px}
+.main{display:flex;flex-direction:column;align-items:flex-end;gap:2px}
+.lbl{font-size:10px;letter-spacing:.2em;color:#7A332A;font-weight:700;white-space:nowrap}
+.main .lbl{align-self:flex-start;font-size:11px}
+.seg7{display:flex;gap:4px;transform:skewX(-6deg)}
+.seg7 svg{display:block}
+.big svg{width:min(17vw,62px);height:min(30vw,108px)}
+.sm svg{width:20px;height:34px}
+.seg7 .s{fill:var(--led-off)}
+.seg7 .s.on{fill:var(--led);filter:drop-shadow(0 0 4px var(--led-glow))}
+.big.tick .s.on{animation:flash .25s ease-out}
+@keyframes flash{0%{filter:drop-shadow(0 0 16px rgba(255,80,50,1))}}
+.big.blink .s.on{animation:blinkon 1s steps(1) infinite}
+@keyframes blinkon{50%{opacity:.25}}
 
-/* ── 按鈕 ───────────────────────────── */
-.controls{display:grid;grid-template-columns:1fr;gap:9px;padding:14px}
-.controls.dual{grid-template-columns:1fr 1fr}
+.subs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:12px;
+  border-top:1px solid #2A0D0A;padding-top:9px}
+.subs>div{display:flex;flex-direction:column;align-items:center;gap:5px}
+
+/* ── 按鍵 ───────────────────────────── */
+.keys{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-top:13px;padding:0 2px}
+.key{
+  appearance:none;font-family:inherit;cursor:pointer;
+  padding:15px 2px 13px;border-radius:9px;
+  border:1px solid #0D0E10;
+  background:linear-gradient(180deg,#3A3D44,#25272C);
+  color:#E9ECF0;font-size:16px;font-weight:800;letter-spacing:.1em;
+  box-shadow:0 4px 0 #0C0D0F,0 6px 10px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.12);
+  transition:transform .06s,box-shadow .06s;
+  position:relative;touch-action:manipulation;user-select:none;-webkit-user-select:none;
+}
+.key::before{content:"";position:absolute;left:28%;right:28%;top:6px;height:3px;border-radius:2px;background:var(--k,#666)}
+.key:active,.key.down{transform:translateY(3px);box-shadow:0 1px 0 #0C0D0F,0 2px 4px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.08)}
+.key:focus-visible{outline:2px solid var(--taxi);outline-offset:3px}
+.key[data-k="go"]{--k:#3BFF6E}
+.key[data-k="pause"]{--k:#FFB020}
+.key[data-k="pay"]{--k:#FF3B24}
+.key[data-k="free"]{--k:#9AA3AE}
+.key small{display:block;font-size:9px;font-weight:600;letter-spacing:.08em;color:#8B929C;margin-top:3px}
+
+.slot{margin:14px 22% 0;height:6px;border-radius:3px;background:#050506;box-shadow:inset 0 2px 3px rgba(0,0,0,.9),0 1px 0 rgba(255,255,255,.06)}
+
+/* ── 表頭下方的狀態列 ───────────────── */
+.strip{display:flex;justify-content:space-between;gap:10px;margin:10px 4px 0;
+  font-family:var(--font-mono);font-size:11px;color:var(--mute)}
+.strip b{color:#C9CFD7;font-weight:500}
+
+/* ── 收據 ───────────────────────────── */
+.receiptWrap{display:flex;justify-content:center;margin-top:-2px}
+.receipt{
+  width:min(84%,300px);background:var(--paper);color:var(--ink);
+  font-family:var(--font-mono);font-size:12.5px;line-height:1.7;
+  padding:16px 16px 20px;
+  box-shadow:0 10px 24px rgba(0,0,0,.5);
+  transform-origin:top;
+  -webkit-mask:linear-gradient(#000 0 0) 0 0/100% calc(100% - 8px) no-repeat,
+    conic-gradient(from -45deg at 50% 100%,#0000,#000 1deg 89deg,#0000 90deg) 0 100%/12px 8px repeat-x;
+          mask:linear-gradient(#000 0 0) 0 0/100% calc(100% - 8px) no-repeat,
+    conic-gradient(from -45deg at 50% 100%,#0000,#000 1deg 89deg,#0000 90deg) 0 100%/12px 8px repeat-x;
+}
+.receipt.printing{animation:print var(--dur,1.6s) steps(18) both}
+@keyframes print{from{clip-path:inset(0 0 100% 0);transform:translateY(-14px)}to{clip-path:inset(0 0 0 0);transform:none}}
+.receipt h2{margin:0;font-size:15px;letter-spacing:.24em;text-align:center;font-weight:800}
+.receipt .sub{text-align:center;font-size:10.5px;opacity:.6;margin:2px 0 10px;letter-spacing:.1em}
+.rule{border-top:1px dashed rgba(30,28,25,.5);margin:9px 0}
+.line{display:flex;justify-content:space-between;gap:12px}
+.line span:last-child{font-variant-numeric:tabular-nums}
+.total{font-size:20px;font-weight:800;margin-top:2px}
+.receipt .thanks{text-align:center;margin-top:10px;letter-spacing:.14em;font-weight:700}
+.receipt .fine{font-size:10px;line-height:1.55;opacity:.6;margin-top:10px}
+.receipt .btn{width:100%;margin-top:12px;background:var(--ink);color:var(--paper);border-color:transparent;font-size:13px;padding:12px}
+
+/* ── 一般按鈕、設定 ─────────────────── */
 .btn{
-  appearance:none;font-family:inherit;font-size:15px;font-weight:700;letter-spacing:.14em;
-  padding:16px 10px;border-radius:11px;border:1px solid var(--edge);
-  background:var(--case-hi);color:#E7EAEE;cursor:pointer;
-  transition:transform .08s,filter .15s;
+  appearance:none;font-family:inherit;font-size:14px;font-weight:700;letter-spacing:.1em;
+  padding:13px 10px;border-radius:10px;border:1px solid var(--edge);
+  background:#22262C;color:#E7EAEE;cursor:pointer;
 }
-.btn:active{transform:translateY(1px)}
 .btn:focus-visible{outline:2px solid var(--taxi);outline-offset:2px}
-.btn.primary{background:var(--taxi);color:#171200;border-color:transparent}
-.btn.ghost{background:transparent;color:var(--mute)}
-.btn[disabled]{opacity:.35;cursor:not-allowed}
-
-/* ── 費率設定 ───────────────────────── */
-details{border-top:1px solid var(--edge)}
-summary{
+.tools{display:grid;grid-template-columns:1fr;gap:9px;margin-top:16px}
+.panel{margin-top:14px;background:var(--plastic);border:1px solid var(--edge);border-radius:14px;overflow:hidden}
+details>summary{
   padding:13px 16px;font-size:12.5px;color:var(--mute);cursor:pointer;
   letter-spacing:.06em;list-style:none;display:flex;justify-content:space-between;
 }
 summary::-webkit-details-marker{display:none}
 summary b{color:#C9CFD7;font-weight:600}
 .rates{padding:2px 16px 16px}
-.chips{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:14px}
-.chip{
-  font-family:inherit;font-size:12.5px;padding:7px 13px;border-radius:999px;
-  border:1px solid var(--edge);background:transparent;color:var(--mute);cursor:pointer;
-}
-.chip[aria-pressed="true"]{background:rgba(255,212,0,.14);border-color:rgba(255,212,0,.55);color:var(--taxi)}
-.chip:focus-visible{outline:2px solid var(--taxi);outline-offset:2px}
-select{
+select,input[type=text]{
   width:100%;font-family:inherit;font-size:14.5px;
   padding:11px 10px;border-radius:8px;border:1px solid var(--edge);
-  background:var(--well);color:#E7EAEE;margin-bottom:11px;
+  background:#06070A;color:#E7EAEE;margin-bottom:11px;
 }
-select:focus-visible{outline:2px solid var(--taxi);outline-offset:1px}
+select:focus-visible,input[type=text]:focus-visible{outline:2px solid var(--taxi);outline-offset:1px}
 .updated{margin:0 0 15px;font-size:11px;line-height:1.65;color:var(--mute)}
 .updated b{color:#C9CFD7;font-weight:600}
 .hint{margin:6px 0 0;font-size:10.5px;line-height:1.6;color:var(--mute)}
@@ -123,13 +192,14 @@ label{display:block;font-size:10.5px;color:var(--mute);letter-spacing:.09em;marg
 input[type=number]{
   width:100%;font-family:var(--font-mono);font-size:14px;
   padding:9px 10px;border-radius:8px;border:1px solid var(--edge);
-  background:var(--well);color:#E7EAEE;
+  background:#06070A;color:#E7EAEE;
 }
 input[type=number]:focus-visible{outline:2px solid var(--taxi);outline-offset:1px}
-.switch{display:flex;align-items:center;gap:9px;margin-top:13px;font-size:12.5px;color:#C9CFD7}
-.switch input{width:17px;height:17px;accent-color:var(--taxi)}
+.sep{margin:18px 0 10px;padding-top:14px;border-top:1px solid var(--edge);font-size:11px;letter-spacing:.2em;color:#C9CFD7;font-weight:600}
+.switch{display:flex;align-items:center;gap:9px;margin-top:11px;font-size:12.5px;color:#C9CFD7}
+.switch input{width:17px;height:17px;accent-color:var(--taxi);flex:none}
+.switch label{margin:0;font-size:12.5px;letter-spacing:0;color:inherit}
 
-/* ── 資料流水帳 ─────────────────────── */
 .ledger{
   border-top:1px solid var(--edge);padding:12px 16px;
   font-family:var(--font-mono);font-size:11px;color:var(--mute);
@@ -137,28 +207,6 @@ input[type=number]:focus-visible{outline:2px solid var(--taxi);outline-offset:1p
 }
 .ledger b{color:#C9CFD7;font-weight:500}
 .ledger .zero{color:#3DDC97}
-
-/* ── 收據 ───────────────────────────── */
-.receipt{
-  margin-top:16px;background:var(--paper);color:var(--ink);
-  font-family:var(--font-mono);font-size:12.5px;line-height:1.75;
-  padding:20px 18px 22px;
-  border-radius:3px;
-  -webkit-mask:radial-gradient(5px at 5px 50%,#0000 98%,#000) -5px 0/10px 100% repeat-y,
-        radial-gradient(5px at calc(100% - 5px) 50%,#0000 98%,#000) calc(100% + 5px) 0/10px 100% repeat-y,
-        linear-gradient(#000 0 0) 5px 0/calc(100% - 10px) 100% no-repeat;
-          mask:radial-gradient(5px at 5px 50%,#0000 98%,#000) -5px 0/10px 100% repeat-y,
-        radial-gradient(5px at calc(100% - 5px) 50%,#0000 98%,#000) calc(100% + 5px) 0/10px 100% repeat-y,
-        linear-gradient(#000 0 0) 5px 0/calc(100% - 10px) 100% no-repeat;
-}
-.receipt h2{margin:0 0 3px;font-size:14px;letter-spacing:.3em;text-align:center;font-weight:700}
-.receipt .sub{text-align:center;font-size:10.5px;opacity:.6;margin-bottom:14px;letter-spacing:.08em}
-.rule{border-top:1px dashed rgba(34,32,28,.42);margin:11px 0}
-.line{display:flex;justify-content:space-between;gap:12px}
-.line span:last-child{font-variant-numeric:tabular-nums}
-.total{font-size:19px;font-weight:700;margin-top:4px}
-.receipt .fine{font-size:10.5px;line-height:1.6;opacity:.62;margin-top:14px}
-.receipt .btn{width:100%;margin-top:14px;background:var(--ink);color:var(--paper);border-color:transparent;font-size:13px;padding:13px}
 
 /* ── 頁尾 ───────────────────────────── */
 footer{margin-top:20px;font-size:11.5px;line-height:1.85;color:var(--mute)}
@@ -178,8 +226,20 @@ footer a:focus-visible{outline:2px solid var(--taxi);outline-offset:3px;border-r
 .gh p{margin:0 0 8px;line-height:1.75}
 .gh .star{margin-bottom:0;color:#C9CFD7}
 .disclaim b{color:#8A929E;font-weight:600}
-.err{margin:14px 16px 0;padding:11px 13px;border-radius:9px;background:rgba(228,87,46,.14);border:1px solid rgba(228,87,46,.4);color:#FFB49C;font-size:12.5px;line-height:1.6}
+.err{margin:12px 0 0;padding:11px 13px;border-radius:9px;background:rgba(228,87,46,.14);border:1px solid rgba(228,87,46,.4);color:#FFB49C;font-size:12.5px;line-height:1.6}
 [hidden]{display:none !important}
+
+/* 手機橫放在儀表板上：表頭佔滿畫面，數字放大 */
+@media (orientation:landscape) and (max-height:520px){
+  body{padding:8px 12px}
+  .shell{max-width:860px}
+  .flag{display:none}
+  .glass{display:grid;grid-template-columns:auto 1fr;column-gap:18px;align-items:end}
+  .status{grid-column:1/-1}
+  .big svg{width:min(9vw,74px);height:min(40vh,128px)}
+  .subs{grid-template-columns:1fr;margin:0;border:0;padding:0;gap:4px}
+  .subs>div{flex-direction:row;justify-content:flex-end;gap:14px}
+}
 @media (prefers-reduced-motion:reduce){*{animation:none !important;transition:none !important}}
 </style>
 </head>
@@ -190,34 +250,56 @@ footer a:focus-visible{outline:2px solid var(--taxi);outline-offset:3px;border-r
     <div class="err" style="margin:0 0 12px">這個跳表需要 JavaScript 才能讀取 GPS 與計算車資。請在瀏覽器設定中開啟 JavaScript 後重新載入。程式仍然只在你的裝置上執行，不會連線。</div>
   </noscript>
 
-  <div class="lampbar" id="lampbar" data-state="idle">
-    <span class="lamp"></span>
-    <span class="lamptext" id="lamptext">空車</span>
-    <span class="sig" id="sig">定位未啟動</span>
+  <div class="flag" id="flag" data-on="1" aria-live="polite"><span>空車</span></div>
+
+  <main class="unit" id="unit">
+    <span class="screw tl"></span><span class="screw tr"></span><span class="screw bl"></span><span class="screw br"></span>
+    <div class="brand"><span>計程車計費表</span><span class="model">TX-26</span></div>
+
+    <div class="glass">
+      <div class="status">
+        <span class="st" id="ledFree"><i></i>空車</span>
+        <span class="st g" id="ledHire"><i></i>載客</span>
+        <span class="st y" id="ledPause"><i></i>暫停</span>
+        <span class="st y" id="ledNight"><i></i>夜間</span>
+        <span class="st y" id="ledExtra"><i></i>加成</span>
+      </div>
+      <div class="main">
+        <span class="lbl" id="mainLbl">時間</span>
+        <div class="seg7 big" id="dFare" role="img" aria-label="車資"></div>
+      </div>
+      <div class="subs">
+        <div><span class="lbl">里程 KM</span><div class="seg7 sm" id="dDist"></div></div>
+        <div><span class="lbl">延滯 分.秒</span><div class="seg7 sm" id="dIdle"></div></div>
+        <div><span class="lbl">計時 分.秒</span><div class="seg7 sm" id="dTime"></div></div>
+      </div>
+    </div>
+
+    <div class="keys">
+      <button class="key" type="button" data-k="go" id="kGo">載客<small>開始</small></button>
+      <button class="key" type="button" data-k="pause" id="kPause">暫停<small>停表</small></button>
+      <button class="key" type="button" data-k="pay" id="kPay">收費<small>印收據</small></button>
+      <button class="key" type="button" data-k="free" id="kFree">空車<small>歸零</small></button>
+    </div>
+    <div class="slot"></div>
+  </main>
+
+  <div class="receiptWrap"><section class="receipt" id="receipt" hidden aria-live="polite"></section></div>
+
+  <div class="strip">
+    <span id="sig">定位未啟動</span>
+    <span id="note">按「載客」開始跳表</span>
   </div>
 
-  <main class="meter">
-    <div class="well">
-      <div class="fare" id="fare">
-        <span class="cur">NT$</span>
-        <div class="digits" id="digits"></div>
-      </div>
-      <div class="readouts">
-        <div><b id="outDist">0.00</b><span>里程 KM</span></div>
-        <div><b id="outTime">00:00</b><span>乘車時間</span></div>
-        <div><b id="outIdle">00:00</b><span>延滯計時</span></div>
-      </div>
-      <p class="note" id="note">按下開始計費後才會讀取定位</p>
-    </div>
+  <div class="err" id="err" hidden></div>
 
-    <div class="controls" id="controls">
-      <button class="btn primary" id="btnStart">開始計費</button>
-    </div>
+  <div class="tools">
+    <button class="btn" type="button" id="btnFull" hidden>全螢幕（手機橫放在儀表板上更像）</button>
+  </div>
 
-    <div class="err" id="err" hidden></div>
-
+  <section class="panel">
     <details id="rateBox">
-      <summary><span>費率設定</span><b id="rateName">北北基</b></summary>
+      <summary><span>費率與聲音設定</span><b id="rateName">北北基</b></summary>
       <div class="rates">
         <label for="presetSel">你在哪個縣市搭車</label>
         <select id="presetSel"></select>
@@ -234,13 +316,30 @@ footer a:focus-visible{outline:2px solid var(--taxi);outline-offset:3px;border-r
           <div class="span2"><label for="fExtra">春節／颱風假等加成 元</label><input type="number" id="fExtra" min="0" step="1">
             <p class="hint">春節期間各縣市約加收 30–50 元；台南、高雄、屏東在颱風假時另加 50 元。實際金額看當年公告。</p></div>
         </div>
+
+        <p class="sep">聲音</p>
+        <label for="sndSel">跳表聲</label>
+        <select id="sndSel">
+          <option value="beep">嗶（電子錶）</option>
+          <option value="click">喀（機械繼電器）</option>
+          <option value="off">靜音</option>
+        </select>
         <div class="switch">
-          <input type="checkbox" id="snd" checked>
-          <label for="snd" style="margin:0;font-size:12.5px;letter-spacing:0;color:inherit">跳表時發出聲音</label>
+          <input type="checkbox" id="voice" checked>
+          <label for="voice">語音播報（歡迎搭乘、報車資、提醒隨身物品）</label>
         </div>
+        <p class="hint" id="voiceHint">語音用的是手機內建的中文語音，不會連網。</p>
+
+        <p class="sep">其他</p>
+        <label for="plate">收據上的車號</label>
+        <input type="text" id="plate" value="TAX-0520" maxlength="10" autocomplete="off" spellcheck="false">
         <div class="switch">
           <input type="checkbox" id="wake" checked>
-          <label for="wake" style="margin:0;font-size:12.5px;letter-spacing:0;color:inherit">計費期間保持螢幕開啟</label>
+          <label for="wake">計費期間保持螢幕開啟</label>
+        </div>
+        <div class="switch">
+          <input type="checkbox" id="sim">
+          <label for="sim">試跑模式：不用 GPS，模擬市區走走停停（在家先玩玩看）</label>
         </div>
       </div>
     </details>
@@ -250,9 +349,7 @@ footer a:focus-visible{outline:2px solid var(--taxi);outline-offset:3px;border-r
       <span>上傳伺服器 <b class="zero">0</b></span>
       <span>寫入裝置 <b class="zero">0</b></span>
     </div>
-  </main>
-
-  <section class="receipt" id="receipt" hidden aria-live="polite"></section>
+  </section>
 
   <footer>
     <h3>這個網站不會知道你去了哪裡</h3>
@@ -284,12 +381,13 @@ footer a:focus-visible{outline:2px solid var(--taxi);outline-offset:3px;border-r
       <p class="star">覺得好用的話，順手到 <a href="https://github.com/stwater20/taxi" rel="noopener noreferrer">GitHub 幫我們按顆星星 ⭐</a> —— 這是我們繼續維護費率的動力。</p>
     </section>
 
-    <p class="disclaim">本工具依各縣市公告費率估算。手機 GPS 量到的距離和車上計程表本來就會有落差，過隧道、走地下道、在高樓之間穿梭時落差會更明顯。<b>實際要付多少，一律以車上的計程表為準</b>，這裡的數字不能拿來當作交易或申訴的依據。真的有爭議，記下車牌和時間，打 1999 或各縣市交通局的申訴專線。</p>
+    <p class="disclaim">這是好玩用的仿真跳表，依各縣市公告費率估算。手機 GPS 量到的距離和車上計程表本來就會有落差，過隧道、走地下道、在高樓之間穿梭時落差會更明顯。<b>實際要付多少，一律以車上的計程表為準</b>，這裡的數字和收據不能拿來當作交易、報帳或申訴的依據。真的有爭議，記下車牌和時間，打 1999 或各縣市交通局的申訴專線。</p>
   </footer>
 </div>
 
 <script>
 "use strict";
+const $ = (id) => document.getElementById(id);
 
 /* ── 七段顯示器 ───────────────────────────────────────── */
 const SEGPATH = {
@@ -304,36 +402,50 @@ const SEGPATH = {
 const ORDER = ["A","B","C","D","E","F","a"];
 const GLYPH = {
   "0":"ABCDEF", "1":"BC", "2":"ABaED", "3":"ABaCD", "4":"FaBC",
-  "5":"AFaCD", "6":"AFaECD", "7":"ABC", "8":"ABCDEFa", "9":"ABCDFa", " ":""
+  "5":"AFaCD", "6":"AFaECD", "7":"ABC", "8":"ABCDEFa", "9":"ABCDFa", "-":"a", " ":""
 };
-const DIGIT_COUNT = 4;
-const digitEls = [];
-const digitsBox = document.getElementById("digits");
+const SVGNS = "http://www.w3.org/2000/svg";
 
-for (let i = 0; i < DIGIT_COUNT; i++) {
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("viewBox", "-1 -1 46 78");
-  svg.setAttribute("aria-hidden", "true");
-  const map = {};
-  for (const key of ORDER) {
-    const p = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
-    p.setAttribute("points", SEGPATH[key]);
-    p.setAttribute("class", "seg");
-    svg.appendChild(p);
-    map[key] = p;
+// 真的計費表就是這種結構：每一位數七段加一個小數點，未點亮的段落保留微光
+function segDisplay(box, n) {
+  const cells = [];
+  for (let i = 0; i < n; i++) {
+    const svg = document.createElementNS(SVGNS, "svg");
+    svg.setAttribute("viewBox", "-1 -1 55 78");
+    svg.setAttribute("aria-hidden", "true");
+    const map = {};
+    for (const key of ORDER) {
+      const p = document.createElementNS(SVGNS, "polygon");
+      p.setAttribute("points", SEGPATH[key]);
+      p.setAttribute("class", "s");
+      svg.appendChild(p); map[key] = p;
+    }
+    const dp = document.createElementNS(SVGNS, "circle");
+    dp.setAttribute("cx", "49.5"); dp.setAttribute("cy", "72"); dp.setAttribute("r", "4");
+    dp.setAttribute("class", "s");
+    svg.appendChild(dp); map.dp = dp;
+    box.appendChild(svg); cells.push(map);
   }
-  digitsBox.appendChild(svg);
-  digitEls.push(map);
+  return (text) => {
+    // "12.34" → 每個字一格，小數點黏在前一格上
+    const chars = [];
+    for (const ch of String(text)) {
+      if (ch === "." && chars.length) chars[chars.length - 1].dp = true;
+      else chars.push({ ch, dp: false });
+    }
+    while (chars.length < n) chars.unshift({ ch: " ", dp: false });
+    const show = chars.slice(-n);
+    for (let i = 0; i < n; i++) {
+      const lit = GLYPH[show[i].ch] ?? "";
+      for (const key of ORDER) cells[i][key].classList.toggle("on", lit.includes(key));
+      cells[i].dp.classList.toggle("on", show[i].dp);
+    }
+  };
 }
-
-function renderFare(value) {
-  const text = String(Math.max(0, Math.round(value))).padStart(DIGIT_COUNT, " ").slice(-DIGIT_COUNT);
-  for (let i = 0; i < DIGIT_COUNT; i++) {
-    const lit = GLYPH[text[i]] ?? "";
-    for (const key of ORDER) digitEls[i][key].classList.toggle("on", lit.includes(key));
-  }
-  document.getElementById("fare").setAttribute("aria-label", "車資 " + Math.round(value) + " 元");
-}
+const showFare = segDisplay($("dFare"), 4);
+const showDist = segDisplay($("dDist"), 4);
+const showIdle = segDisplay($("dIdle"), 4);
+const showTime = segDisplay($("dTime"), 4);
 
 /* ── 費率 ─────────────────────────────────────────────── */
 /* fare-math:start —— 以下為純計算，tests/fare.test.mjs 會直接抽出這段執行 */
@@ -375,7 +487,7 @@ const PRESETS = {
 const FIELDS = { base:"fBase", baseDist:"fBaseD", stepDist:"fStepD", step:"fStep", waitSec:"fWaitS", wait:"fWait", night:"fNight", nightPct:"fNightP" };
 let preset = "taipei";
 
-const sel = document.getElementById("presetSel");
+const sel = $("presetSel");
 for (const key of Object.keys(PRESETS)) {
   const o = document.createElement("option");
   o.value = key; o.textContent = PRESETS[key].name;
@@ -386,22 +498,18 @@ sel.addEventListener("change", () => selectPreset(sel.value));
 function selectPreset(key) {
   preset = key;
   sel.value = key;
-  document.getElementById("rateName").textContent = PRESETS[key].name;
-  for (const [prop, id] of Object.entries(FIELDS)) document.getElementById(id).value = PRESETS[key][prop];
+  $("rateName").textContent = PRESETS[key].name;
+  for (const [prop, id] of Object.entries(FIELDS)) $(id).value = PRESETS[key][prop];
   update();
 }
 for (const id of [...Object.values(FIELDS), "fExtra"]) {
-  document.getElementById(id).addEventListener("input", () => {
-    if (preset !== "custom") { preset = "custom"; selectPresetSilently(); }
+  $(id).addEventListener("input", () => {
+    if (preset !== "custom" && id !== "fExtra") { preset = "custom"; sel.value = "custom"; $("rateName").textContent = "自己填"; }
     update();
   });
 }
-function selectPresetSilently() {
-  sel.value = "custom";
-  document.getElementById("rateName").textContent = "自己填";
-}
 function num(id, fallback) {
-  const v = parseFloat(document.getElementById(id).value);
+  const v = parseFloat($(id).value);
   return Number.isFinite(v) && v >= 0 ? v : fallback;
 }
 function rate() {
@@ -418,15 +526,14 @@ function rate() {
   };
 }
 
-
 /* ── 音效 ─────────────────────────────────────────────────
    全部用 Web Audio 即時合成。不載入任何音檔，因為那會產生
    網路請求，這個專案不做這件事。                              */
 let ctx = null;
-function soundOn() { return document.getElementById("snd").checked; }
+const sndMode = () => $("sndSel").value;
 
 function audioReady() {
-  if (!soundOn()) return null;
+  if (sndMode() === "off") return null;
   try {
     // AudioContext 必須在使用者手勢之後才能建立／恢復
     if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -435,8 +542,23 @@ function audioReady() {
   } catch (_) { return null; }
 }
 
-// 跳表的「喀」：真的計程表是繼電器的機械聲，用一小段衰減噪音做
-function clickSound(freq, level) {
+// 計費表的蜂鳴器：方波、硬起硬收，就是那個「嗶」
+function beep(freq, dur, level, at = 0) {
+  const c = audioReady(); if (!c) return;
+  const t = c.currentTime + at;
+  const o = c.createOscillator(), lp = c.createBiquadFilter(), g = c.createGain();
+  o.type = "square"; o.frequency.value = freq;
+  lp.type = "lowpass"; lp.frequency.value = 5200;   // 小喇叭的高頻本來就出不來
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(level, t + 0.004);
+  g.gain.setValueAtTime(level, t + dur - 0.01);
+  g.gain.linearRampToValueAtTime(0, t + dur);
+  o.connect(lp).connect(g).connect(c.destination);
+  o.start(t); o.stop(t + dur + 0.02);
+}
+
+// 老式計費表的繼電器「喀」：一小段衰減噪音
+function clack(freq, level) {
   const c = audioReady(); if (!c) return;
   const len = Math.floor(c.sampleRate * 0.035);
   const buf = c.createBuffer(1, len, c.sampleRate);
@@ -444,30 +566,76 @@ function clickSound(freq, level) {
   for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 7);
   const src = c.createBufferSource(); src.buffer = buf;
   const bp = c.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = freq; bp.Q.value = 4;
-  const g = c.createGain();
-  g.gain.setValueAtTime(level, c.currentTime);
-  g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + 0.05);
+  const g = c.createGain(); g.gain.value = level;
   src.connect(bp).connect(g).connect(c.destination);
   src.start();
 }
-const tickFare = () => clickSound(2400, 0.30);   // 續程跳表：清脆
-const tickWait = () => clickSound(1100, 0.22);   // 延滯跳表：低沉一點，聽得出差別
 
-// 開始／結束的提示音
-function toneSound(from, to, dur, level) {
-  const c = audioReady(); if (!c) return;
-  const o = c.createOscillator(), g = c.createGain();
-  o.type = "triangle";
-  o.frequency.setValueAtTime(from, c.currentTime);
-  o.frequency.exponentialRampToValueAtTime(to, c.currentTime + dur);
-  g.gain.setValueAtTime(0.0001, c.currentTime);
-  g.gain.exponentialRampToValueAtTime(level, c.currentTime + 0.015);
-  g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + dur);
-  o.connect(g).connect(c.destination);
-  o.start(); o.stop(c.currentTime + dur + 0.02);
+const keyBeep = () => beep(2730, 0.055, 0.10);
+const badKey  = () => { beep(620, 0.09, 0.13); beep(620, 0.09, 0.13, 0.14); };
+function jumpSound(isWait) {
+  const m = sndMode();
+  if (m === "beep") beep(2050, 0.13, 0.16);
+  else if (m === "click") clack(isWait ? 1100 : 2400, isWait ? 0.22 : 0.3);
 }
-const startSound = () => toneSound(660, 990, 0.16, 0.14);
-const stopSound  = () => toneSound(760, 380, 0.34, 0.14);
+
+// 熱感印表機：步進馬達一格一格推紙的「滋滋滋」
+function printerSound(dur) {
+  const c = audioReady(); if (!c) return;
+  const t = c.currentTime;
+  const len = Math.floor(c.sampleRate * dur);
+  const buf = c.createBuffer(1, len, c.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  const src = c.createBufferSource(); src.buffer = buf;
+  const bp = c.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 3400; bp.Q.value = 1.4;
+  const g = c.createGain(); g.gain.value = 0;
+  const step = c.createOscillator(); step.type = "square"; step.frequency.value = 34;
+  const depth = c.createGain(); depth.gain.value = 0.06;
+  step.connect(depth).connect(g.gain);
+  const hum = c.createOscillator(); hum.type = "sawtooth"; hum.frequency.value = 136;
+  const hg = c.createGain(); hg.gain.value = 0.018;
+  const master = c.createGain();
+  master.gain.setValueAtTime(1, t + dur - 0.08);
+  master.gain.linearRampToValueAtTime(0, t + dur);
+  src.connect(bp).connect(g).connect(master);
+  hum.connect(hg).connect(master);
+  master.connect(c.destination);
+  for (const n of [src, step, hum]) { n.start(t); n.stop(t + dur); }
+  // 撕紙
+  setTimeout(() => clack(1800, 0.18), dur * 1000 + 120);
+}
+
+/* ── 語音播報 ─────────────────────────────────────────────
+   只用裝置內建（localService）的語音。雲端語音會把文字送出去，
+   雖然念的只是「歡迎搭乘」，這個專案還是不碰。               */
+const tts = window.speechSynthesis || null;
+function pickVoice() {
+  if (!tts) return null;
+  const local = tts.getVoices().filter(v => v.localService);
+  const by = (re) => local.find(v => re.test(v.lang.replace("_", "-")));
+  return by(/^zh-TW/i) || by(/^zh-Hant/i) || by(/^zh-HK/i) || by(/^cmn/i) || by(/^zh/i) || null;
+}
+function refreshVoiceHint() {
+  const hint = $("voiceHint");
+  if (!tts) { hint.textContent = "這個瀏覽器不支援語音播報。"; return; }
+  const v = pickVoice();
+  hint.textContent = v
+    ? "使用手機內建語音「" + v.name + "」，不會連網。"
+    : "這台裝置目前找不到內建的中文語音，語音播報會自動略過。";
+}
+if (tts) {
+  tts.addEventListener?.("voiceschanged", refreshVoiceHint);
+  refreshVoiceHint();
+}
+function say(text) {
+  if (!tts || !$("voice").checked) return;
+  const v = pickVoice(); if (!v) return;
+  tts.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.voice = v; u.lang = v.lang; u.rate = 1.0; u.pitch = 1.05;
+  tts.speak(u);
+}
 
 /* ── 行程狀態（全部只存在記憶體） ──────────────────────── */
 const MAX_ACCURACY = 45;     // 公尺，超過就丟掉這筆定位
@@ -475,12 +643,14 @@ const MAX_SPEED    = 60;     // 公尺/秒，超過視為跳點
 const IDLE_SPEED   = 5 / 3.6;// 時速 5 公里以下開始延滯計時
 const FIX_TIMEOUT  = 12000;  // 太久沒定位就暫停延滯計時
 
+// idle 空車 → running 載客 ⇄ paused 暫停 → done 收費 → idle
 let state = "idle";
-let watchId = null, ticker = null, wakeLock = null;
+let watchId = null, wakeLock = null, simulating = false;
 let startedAt = 0, endedAt = 0;
 let meters = 0, idleSec = 0, samples = 0;
 let last = null, lastFixAt = 0, curSpeed = 0, nightApplied = false, lastFare = 0;
-let lastStepUnits = 0, lastWaitUnits = 0;
+let lastWaitUnits = 0;
+let sim = { v: 0, target: 0, left: 0 };
 
 function haversine(a, b) {
   const R = 6371008.8, rad = Math.PI / 180;
@@ -496,47 +666,74 @@ function clock(sec) {
   const mm = String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
   return h > 0 ? h + ":" + mm : mm;
 }
+// 給七段顯示器用：「分.秒」，超過 99 分改成「時.分」
+function segClock(sec) {
+  sec = Math.max(0, Math.floor(sec));
+  const m = Math.floor(sec / 60), s = sec % 60;
+  if (m < 100) return String(m).padStart(2, "0") + "." + String(s).padStart(2, "0");
+  return String(Math.floor(m / 60)).padStart(2, "0") + "." + String(m % 60).padStart(2, "0");
+}
+function elapsed() {
+  if (state === "idle") return 0;
+  return ((state === "done" ? endedAt : Date.now()) - startedAt) / 1000;
+}
 function breakdown() {
   const r = rate();
   return Object.assign({ r }, computeFare(meters, idleSec, r, nightApplied));
 }
+function led(id, on) { $(id).classList.toggle("on", on); }
+
 function update() {
   const b = breakdown();
-  if (state !== "done") renderFare(b.total);
-  document.getElementById("outDist").textContent = (meters / 1000).toFixed(2);
-  document.getElementById("outTime").textContent = clock(state === "idle" ? 0 : ((state === "done" ? endedAt : Date.now()) - startedAt) / 1000);
-  document.getElementById("outIdle").textContent = clock(idleSec);
-  document.getElementById("ledSamples").textContent = samples;
+  const big = $("dFare");
+  if (state === "idle") {
+    // 空車時大螢幕顯示時鐘，冒號（小數點）每秒閃一下
+    const d = new Date();
+    const colon = d.getSeconds() % 2 === 0 ? "." : "";
+    showFare(String(d.getHours()).padStart(2, "0") + colon + String(d.getMinutes()).padStart(2, "0"));
+    $("mainLbl").textContent = "時間";
+    big.setAttribute("aria-label", "目前時間");
+  } else {
+    showFare(String(b.total));
+    $("mainLbl").textContent = "車資 元";
+    big.setAttribute("aria-label", "車資 " + b.total + " 元");
+  }
+  big.classList.toggle("blink", state === "done");
+  showDist((meters / 1000).toFixed(2));
+  showIdle(segClock(idleSec));
+  showTime(segClock(elapsed()));
+  $("ledSamples").textContent = samples;
 
-  if (state === "running") {
+  led("ledFree",  state === "idle");
+  led("ledHire",  state === "running");
+  led("ledPause", state === "paused");
+  led("ledNight", state !== "idle" && b.nightFee > 0);
+  led("ledExtra", state !== "idle" && b.extra > 0);
+  $("flag").dataset.on = state === "idle" ? "1" : "0";
+
+  if (state === "running" || state === "paused") {
     const parts = [];
-    parts.push(b.stepUnits > 0 ? "續程 " + b.stepUnits + " 跳" : "起程運價中");
+    if (state === "paused") parts.push("暫停中，里程與延滯不計");
+    else parts.push(b.stepUnits > 0 ? "續程 " + b.stepUnits + " 跳" : "起程運價中");
     if (b.waitUnits > 0) parts.push("延滯 " + b.waitUnits + " 跳");
-    if (b.nightFee) parts.push("夜間 +" + b.nightFee);
-    document.getElementById("note").textContent = parts.join(" · ");
+    $("note").textContent = parts.join(" · ");
   }
-  if (state !== "done" && b.total !== lastFare) {
-    if (lastFare) {
-      const f = document.getElementById("fare");
-      f.classList.remove("tick"); void f.offsetWidth; f.classList.add("tick");
-      if (state === "running") {
-        if (b.waitUnits > lastWaitUnits) tickWait();
-        else if (b.stepUnits > lastStepUnits) tickFare();
-      }
-    }
-    lastFare = b.total;
+
+  if (state === "running" && lastFare && b.total !== lastFare) {
+    big.classList.remove("tick"); void big.offsetWidth; big.classList.add("tick");
+    jumpSound(b.waitUnits > lastWaitUnits);
   }
-  lastStepUnits = b.stepUnits;
-  lastWaitUnits = b.waitUnits;
+  if (state !== "idle" && state !== "done") { lastFare = b.total; lastWaitUnits = b.waitUnits; }
 }
-function signal(acc) {
-  const el = document.getElementById("sig");
-  if (acc == null) { el.textContent = "等待定位…"; return; }
-  const q = acc <= 10 ? "訊號良好" : acc <= 25 ? "訊號普通" : "訊號微弱";
-  el.textContent = q + " ±" + Math.round(acc) + " m";
+
+function signal(text) { $("sig").textContent = text; }
+function gpsSignal(acc) {
+  if (acc == null) { signal("等待定位…"); return; }
+  const q = acc <= 10 ? "GPS 良好" : acc <= 25 ? "GPS 普通" : "GPS 微弱";
+  signal(q + " ±" + Math.round(acc) + " m");
 }
 function fail(msg) {
-  const el = document.getElementById("err");
+  const el = $("err");
   el.textContent = msg;
   el.hidden = false;
 }
@@ -546,10 +743,10 @@ function onFix(pos) {
   const { latitude: lat, longitude: lon, accuracy: acc } = pos.coords;
   const t = pos.timestamp || Date.now();
   samples++;
-  signal(acc);
+  gpsSignal(acc);
   if (acc > MAX_ACCURACY) { update(); return; }
 
-  if (last) {
+  if (last && state === "running") {
     const d = haversine(last, { lat, lon });
     const dt = (t - last.t) / 1000;
     if (dt > 0) {
@@ -560,111 +757,150 @@ function onFix(pos) {
     }
   }
   if (Number.isFinite(pos.coords.speed) && pos.coords.speed !== null) curSpeed = Math.max(0, pos.coords.speed);
+  // 暫停中也要更新最後位置，否則恢復時會把暫停期間移動的距離一次算進來
   last = { lat, lon, t };
   lastFixAt = Date.now();
   update();
 }
 function onFixError(e) {
   const map = {
-    1: "沒有定位權限，跳表無法計算里程。請到瀏覽器設定允許這個網站使用定位，再重新開始。",
+    1: "沒有定位權限，跳表無法計算里程。請到瀏覽器設定允許這個網站使用定位，或在設定裡打開「試跑模式」。",
     2: "目前抓不到定位訊號。移動到空曠處或靠近窗邊，訊號恢復後會自動接續計算。",
     3: "定位逾時，正在重試。"
   };
   fail(map[e.code] || "定位失敗，請重新開始計費。");
-  if (e.code === 1) stop();
+  if (e.code === 1 && (state === "running" || state === "paused")) pay();
+}
+
+// 試跑模式：市區走走停停。時速 20–50 公里開一段，再停下來等紅燈
+function simStep() {
+  if (sim.left <= 0) {
+    const driving = sim.target === 0;
+    sim.target = driving ? (20 + Math.random() * 30) / 3.6 : 0;
+    sim.left = driving ? 15 + Math.random() * 40 : 6 + Math.random() * 35;
+  }
+  sim.left--;
+  const dv = sim.target - sim.v;
+  sim.v = Math.max(0, sim.v + Math.sign(dv) * Math.min(Math.abs(dv), 2.8));
+  samples++;
+  lastFixAt = Date.now();
+  curSpeed = sim.v;
+  if (state === "running") meters += sim.v;
+  signal("試跑模式 · " + Math.round(sim.v * 3.6) + " km/h");
 }
 
 async function keepAwake(on) {
   try {
-    if (on && document.getElementById("wake").checked && "wakeLock" in navigator) {
+    if (on && $("wake").checked && "wakeLock" in navigator) {
       wakeLock = await navigator.wakeLock.request("screen");
     } else if (!on && wakeLock) { await wakeLock.release(); wakeLock = null; }
   } catch (_) { /* 不支援就算了，不影響計費 */ }
 }
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible" && state === "running") keepAwake(true);
+  if (document.visibilityState === "visible" && (state === "running" || state === "paused")) keepAwake(true);
 });
 
-/* ── 開始 / 結束 / 歸零 ───────────────────────────────── */
-function start() {
-  if (!("geolocation" in navigator)) { fail("這個瀏覽器不支援定位功能，無法跳表。"); return; }
-  document.getElementById("err").hidden = true;
-  state = "running";
-  startedAt = Date.now();
-  meters = 0; idleSec = 0; samples = 0; last = null; lastFixAt = 0; curSpeed = 0; lastFare = 0;
-  lastStepUnits = 0; lastWaitUnits = 0;
-  const r0 = rate();
-  nightApplied = isNight(startedAt) && (r0.night > 0 || r0.nightPct > 0);
-
-  document.getElementById("receipt").hidden = true;
-  document.getElementById("lampbar").dataset.state = "running";
-  document.getElementById("lamptext").textContent = "計費中";
-  document.getElementById("rateBox").open = false;
-  document.getElementById("note").textContent = "起程運價中";
-  signal(null);
-  renderControls();
-  keepAwake(true);
-  startSound();
-
-  watchId = navigator.geolocation.watchPosition(onFix, onFixError, {
-    enableHighAccuracy: true, maximumAge: 1000, timeout: 15000
-  });
-  ticker = setInterval(() => {
+// 一秒一跳的心跳：空車時走時鐘，載客時累計延滯
+setInterval(() => {
+  if (simulating && (state === "running" || state === "paused")) simStep();
+  if (state === "running") {
     const fresh = Date.now() - lastFixAt < FIX_TIMEOUT;
     if (fresh && curSpeed < IDLE_SPEED) idleSec++;
-    update();
-  }, 1000);
+  }
+  update();
+}, 1000);
+
+/* ── 按鍵：載客 / 暫停 / 收費 / 空車 ─────────────────────── */
+function hire() {
+  if (state === "paused") {                       // 暫停 → 繼續
+    state = "running"; keyBeep(); say("繼續計費"); update(); return;
+  }
+  if (state === "running") { badKey(); return; }
+  if (state === "done") clear(true);
+  simulating = $("sim").checked;
+  if (!simulating && !("geolocation" in navigator)) {
+    badKey(); fail("這個瀏覽器不支援定位功能。可以在設定裡打開「試跑模式」玩玩看。"); return;
+  }
+  $("err").hidden = true;
+  state = "running";
+  startedAt = Date.now();
+  meters = 0; idleSec = 0; samples = 0; last = null; lastFixAt = 0; curSpeed = 0;
+  sim = { v: 0, target: 0, left: 3 };
+  const r0 = rate();
+  nightApplied = isNight(startedAt) && (r0.night > 0 || r0.nightPct > 0);
+  const b0 = computeFare(0, 0, r0, nightApplied);
+  lastFare = b0.total; lastWaitUnits = 0;
+
+  $("rateBox").open = false;
+  keyBeep(); beep(2730, 0.055, 0.10, 0.12);
+  say("歡迎搭乘，請繫好安全帶。起程運價 " + b0.total + " 元。");
+  keepAwake(true);
+  if (simulating) signal("試跑模式 · 0 km/h");
+  else {
+    gpsSignal(null);
+    watchId = navigator.geolocation.watchPosition(onFix, onFixError, {
+      enableHighAccuracy: true, maximumAge: 1000, timeout: 15000
+    });
+  }
   update();
 }
 
-function stop() {
-  if (state !== "running") return;
+function pause() {
+  if (state === "running") { state = "paused"; curSpeed = 0; keyBeep(); say("暫停計費"); update(); }
+  else if (state === "paused") hire();
+  else badKey();
+}
+
+function pay() {
+  if (state !== "running" && state !== "paused") { badKey(); return; }
   state = "done";
   endedAt = Date.now();
   if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
-  clearInterval(ticker); ticker = null;
   last = null;                                   // 立刻丟掉最後一組座標
   keepAwake(false);
-
-  document.getElementById("lampbar").dataset.state = "done";
-  document.getElementById("lamptext").textContent = "已結束";
-  document.getElementById("sig").textContent = "定位已關閉";
-  document.getElementById("note").textContent = "定位已停止，座標未留下";
-  renderControls();
+  const b = breakdown();
+  signal(simulating ? "試跑結束" : "定位已關閉");
+  $("note").textContent = "定位已停止，座標未留下";
   update();
-  printReceipt();
-  stopSound();
+  keyBeep(); beep(2730, 0.055, 0.10, 0.12); beep(2730, 0.055, 0.10, 0.24);
+  say("本次車資 " + b.total + " 元，謝謝搭乘，請記得您的隨身物品。");
+  printReceipt(b);
 }
 
-function reset() {
+function clear(silent) {
+  if (state === "running" || state === "paused") { badKey(); return; }  // 計費中不能直接歸零
   state = "idle";
+  if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
   meters = 0; idleSec = 0; samples = 0; startedAt = 0; endedAt = 0;
-  last = null; curSpeed = 0; nightApplied = false; lastFare = 0;
-  lastStepUnits = 0; lastWaitUnits = 0;
-  document.getElementById("receipt").hidden = true;
-  document.getElementById("receipt").textContent = "";
-  document.getElementById("err").hidden = true;
-  document.getElementById("lampbar").dataset.state = "idle";
-  document.getElementById("lamptext").textContent = "空車";
-  document.getElementById("sig").textContent = "定位未啟動";
-  document.getElementById("note").textContent = "按下開始計費後才會讀取定位";
-  renderControls();
-  renderFare(0);
+  last = null; curSpeed = 0; nightApplied = false; lastFare = 0; lastWaitUnits = 0;
+  $("receipt").hidden = true;
+  $("receipt").textContent = "";
+  $("err").hidden = true;
+  signal("定位未啟動");
+  $("note").textContent = "按「載客」開始跳表";
+  if (!silent) keyBeep();
   update();
 }
 
-function renderControls() {
-  const box = document.getElementById("controls");
-  box.textContent = "";
-  box.classList.toggle("dual", state === "done");
-  const make = (label, cls, fn) => {
-    const b = document.createElement("button");
-    b.className = "btn " + cls; b.type = "button"; b.textContent = label;
-    b.addEventListener("click", fn); box.appendChild(b);
-  };
-  if (state === "idle")    make("開始計費", "primary", start);
-  if (state === "running") make("結束計費", "primary", stop);
-  if (state === "done")  { make("再跑一趟", "primary", start); make("歸零", "ghost", reset); }
+const KEYS = { kGo: hire, kPause: pause, kPay: pay, kFree: () => clear(false) };
+for (const [id, fn] of Object.entries(KEYS)) {
+  const el = $(id);
+  el.addEventListener("click", fn);
+  el.addEventListener("pointerdown", () => el.classList.add("down"));
+  for (const ev of ["pointerup", "pointerleave", "pointercancel"]) el.addEventListener(ev, () => el.classList.remove("down"));
+}
+
+// 全螢幕：手機橫放時整個畫面就是一台表
+const full = document.documentElement.requestFullscreen ? "requestFullscreen"
+           : document.documentElement.webkitRequestFullscreen ? "webkitRequestFullscreen" : null;
+if (full) {
+  $("btnFull").hidden = false;
+  $("btnFull").addEventListener("click", async () => {
+    try {
+      await document.documentElement[full]();
+      await screen.orientation?.lock?.("landscape");
+    } catch (_) { /* 不支援鎖定方向就維持原樣 */ }
+  });
 }
 
 /* ── 收據（只畫在畫面上，沒有存到任何地方） ────────────── */
@@ -672,21 +908,25 @@ function fmtTime(ts) {
   const d = new Date(ts);
   return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
 }
-function printReceipt() {
-  const b = breakdown();
-  const el = document.getElementById("receipt");
+function fmtDate(ts) {
+  const d = new Date(ts);
+  return d.getFullYear() + "/" + String(d.getMonth() + 1).padStart(2, "0") + "/" + String(d.getDate()).padStart(2, "0");
+}
+function printReceipt(b) {
+  const el = $("receipt");
+  const plate = $("plate").value.trim() || "TAX-0520";
   const rows = [
     ["起程 " + (b.r.baseDist / 1000).toFixed(2) + " km", b.r.base],
-    ["續程 " + b.stepUnits + " × " + b.r.step + " 元", b.stepFee],
-    ["延滯 " + b.waitUnits + " × " + b.r.wait + " 元", b.waitFee]
+    ["續程 " + b.stepUnits + " × " + b.r.step, b.stepFee],
+    ["延滯 " + b.waitUnits + " × " + b.r.wait, b.waitFee]
   ];
   if (b.nightFee) rows.push([b.r.nightPct ? "夜間加成 " + b.r.nightPct + "%" : "夜間加成", b.nightFee]);
   if (b.r.extra) rows.push(["其他加成", b.r.extra]);
 
   el.textContent = "";
-  const h = document.createElement("h2"); h.textContent = "車 資 明 細"; el.appendChild(h);
+  const h = document.createElement("h2"); h.textContent = "乘 車 收 據"; el.appendChild(h);
   const sub = document.createElement("p"); sub.className = "sub";
-  sub.textContent = PRESETS[preset].name + " 費率 · " + fmtTime(startedAt) + " → " + fmtTime(endedAt);
+  sub.textContent = PRESETS[preset].name + " 費率";
   el.appendChild(sub);
 
   const add = (left, right, cls) => {
@@ -695,23 +935,30 @@ function printReceipt() {
     const c = document.createElement("span"); c.textContent = right;
     d.append(a, c); el.appendChild(d); return d;
   };
-  add("行駛里程", (meters / 1000).toFixed(2) + " km");
+  const rule = () => el.appendChild(Object.assign(document.createElement("div"), { className: "rule" }));
+  add("車號", plate);
+  add("日期", fmtDate(startedAt));
+  add("上車", fmtTime(startedAt));
+  add("下車", fmtTime(endedAt));
+  rule();
+  add("里程", (meters / 1000).toFixed(2) + " km");
   add("乘車時間", clock((endedAt - startedAt) / 1000));
   add("延滯計時", clock(idleSec));
-  el.appendChild(Object.assign(document.createElement("div"), { className: "rule" }));
+  rule();
   for (const [k, v] of rows) add(k, v + " 元");
-  el.appendChild(Object.assign(document.createElement("div"), { className: "rule" }));
-  add("估算總計", "NT$ " + b.total, "total");
+  rule();
+  add("車資", "NT$ " + b.total, "total");
+  el.appendChild(Object.assign(document.createElement("p"), { className: "thanks", textContent: "謝謝搭乘 · 一路平安" }));
 
   const fine = document.createElement("p"); fine.className = "fine";
-  fine.textContent = "這張明細沒有存進任何地方，重新整理就會消失。GPS 里程與車上計程表必有誤差，實際車資以車內合格計程表為準。";
+  fine.textContent = "手機 GPS 估算，好玩用，不是正式收據。這張收據沒有存進任何地方，重新整理就會消失。";
   el.appendChild(fine);
 
   const copy = document.createElement("button");
   copy.className = "btn"; copy.type = "button"; copy.textContent = "複製明細文字";
   copy.addEventListener("click", async () => {
     const text = [
-      "車資明細（估算）",
+      "乘車明細（估算）",
       PRESETS[preset].name + " 費率 " + fmtTime(startedAt) + "-" + fmtTime(endedAt),
       "里程 " + (meters / 1000).toFixed(2) + " km｜延滯 " + clock(idleSec),
       ...rows.map(([k, v]) => k + " " + v + " 元"),
@@ -722,16 +969,22 @@ function printReceipt() {
     setTimeout(() => { copy.textContent = "複製明細文字"; }, 2200);
   });
   el.appendChild(copy);
+
+  // 從出紙口「印」出來
+  const dur = 1.8;
+  el.style.setProperty("--dur", dur + "s");
+  el.classList.remove("printing"); void el.offsetWidth;
   el.hidden = false;
+  el.classList.add("printing");
+  el.style.animationDelay = ".35s";
+  setTimeout(() => printerSound(dur), 350);
 }
 
 /* ── 啟動 ─────────────────────────────────────────────── */
 // 必須等所有行程狀態變數宣告完才呼叫，否則 update() 會踩到暫時性死區
-document.getElementById("rateDate").textContent = RATES_UPDATED;
+$("rateDate").textContent = RATES_UPDATED;
 selectPreset("taipei");
-document.getElementById("fExtra").value = 0;
-renderControls();
-renderFare(0);
+$("fExtra").value = 0;
 update();
 </script>
 </body>
