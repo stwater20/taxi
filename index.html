@@ -9,6 +9,10 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23FFD400'/%3E%3Crect x='5' y='10' width='22' height='12' rx='2.5' fill='%230E1014'/%3E%3Crect x='8.5' y='13.5' width='4' height='5' fill='%23FF3B24'/%3E%3Crect x='14' y='13.5' width='4' height='5' fill='%23FF3B24'/%3E%3Crect x='19.5' y='13.5' width='4' height='5' fill='%23FF3B24'/%3E%3C/svg%3E">
 <meta name="theme-color" content="#0B0C0E">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="跳表">
 <title>跳表 · 計程車計費表</title>
 <style>
 :root{
@@ -35,7 +39,8 @@ body{
   font-family:var(--font-ui);
   -webkit-text-size-adjust:100%;
   -webkit-tap-highlight-color:transparent;
-  padding:14px 14px calc(28px + env(safe-area-inset-bottom));
+  padding:calc(14px + env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) calc(28px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+  overscroll-behavior-y:none;   /* 行車中誤觸下拉重新整理，整趟就沒了 */
   display:flex;justify-content:center;
 }
 .shell{width:100%;max-width:460px}
@@ -95,8 +100,9 @@ body{
 .main .lbl{align-self:flex-start;font-size:11px}
 .seg7{display:flex;gap:4px;transform:skewX(-6deg)}
 .seg7 svg{display:block}
-.big svg{width:min(17vw,62px);height:min(30vw,108px)}
-.sm svg{width:20px;height:34px}
+.big svg{width:min(17vw,62px);height:auto;aspect-ratio:55/78}
+.sm{gap:2px}
+.sm svg{width:min(20px,calc((100vw - 90px) / 12 - 2.5px));height:auto;aspect-ratio:55/78}
 .seg7 .s{fill:var(--led-off)}
 .seg7 .s.on{fill:var(--led);filter:drop-shadow(0 0 4px var(--led-glow))}
 .big.tick .s.on{animation:flash .25s ease-out}
@@ -118,7 +124,7 @@ body{
   color:#E9ECF0;font-size:16px;font-weight:800;letter-spacing:.1em;
   box-shadow:0 4px 0 #0C0D0F,0 6px 10px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.12);
   transition:transform .06s,box-shadow .06s;
-  position:relative;touch-action:manipulation;user-select:none;-webkit-user-select:none;
+  position:relative;touch-action:manipulation;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;
 }
 .key::before{content:"";position:absolute;left:28%;right:28%;top:6px;height:3px;border-radius:2px;background:var(--k,#666)}
 .key:active,.key.down{transform:translateY(3px);box-shadow:0 1px 0 #0C0D0F,0 2px 4px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.08)}
@@ -178,7 +184,7 @@ summary::-webkit-details-marker{display:none}
 summary b{color:#C9CFD7;font-weight:600}
 .rates{padding:2px 16px 16px}
 select,input[type=text]{
-  width:100%;font-family:inherit;font-size:14.5px;
+  width:100%;font-family:inherit;font-size:16px;
   padding:11px 10px;border-radius:8px;border:1px solid var(--edge);
   background:#06070A;color:#E7EAEE;margin-bottom:11px;
 }
@@ -190,7 +196,7 @@ select:focus-visible,input[type=text]:focus-visible{outline:2px solid var(--taxi
 .grid .span2{grid-column:1/-1}
 label{display:block;font-size:10.5px;color:var(--mute);letter-spacing:.09em;margin-bottom:5px}
 input[type=number]{
-  width:100%;font-family:var(--font-mono);font-size:14px;
+  width:100%;font-family:var(--font-mono);font-size:16px;
   padding:9px 10px;border-radius:8px;border:1px solid var(--edge);
   background:#06070A;color:#E7EAEE;
 }
@@ -231,14 +237,22 @@ footer a:focus-visible{outline:2px solid var(--taxi);outline-offset:3px;border-r
 
 /* 手機橫放在儀表板上：表頭佔滿畫面，數字放大 */
 @media (orientation:landscape) and (max-height:520px){
-  body{padding:8px 12px}
-  .shell{max-width:860px}
+  body{padding:max(6px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 20px max(12px, env(safe-area-inset-left))}
+  .shell{max-width:900px}
   .flag{display:none}
-  .glass{display:grid;grid-template-columns:auto 1fr;column-gap:18px;align-items:end}
-  .status{grid-column:1/-1}
-  .big svg{width:min(9vw,74px);height:min(40vh,128px)}
-  .subs{grid-template-columns:1fr;margin:0;border:0;padding:0;gap:4px}
-  .subs>div{flex-direction:row;justify-content:flex-end;gap:14px}
+  .unit{padding:7px 10px 10px;border-radius:12px}
+  .screw{display:none}
+  .brand{padding:0 6px 5px;font-size:9.5px}
+  .glass{display:grid;grid-template-columns:auto 1fr;column-gap:16px;align-items:end;padding:7px 12px 9px}
+  .status{grid-column:1/-1;margin-bottom:2px}
+  .big svg{width:min(13vw,27vh,106px)}
+  .subs{grid-template-columns:1fr;margin:0;border:0;padding:0;gap:min(8px,1.6vh)}
+  .subs>div{flex-direction:row;justify-content:flex-end;gap:12px}
+  .sm svg{width:min(4.6vw,8vh,28px)}
+  .keys{margin-top:9px;gap:8px}
+  .key{padding:min(14px,3.4vh) 2px min(12px,3vh);font-size:15px}
+  .key::before{top:4px}
+  .slot{display:none}
 }
 @media (prefers-reduced-motion:reduce){*{animation:none !important;transition:none !important}}
 </style>
@@ -295,6 +309,7 @@ footer a:focus-visible{outline:2px solid var(--taxi);outline-offset:3px;border-r
 
   <div class="tools">
     <button class="btn" type="button" id="btnFull" hidden>全螢幕（手機橫放在儀表板上更像）</button>
+    <p class="hint" id="iosHint" hidden>iPhone 要全螢幕：在 Safari 按「分享」→「加入主畫面」，之後從主畫面的「跳表」圖示打開，就沒有網址列了。手機橫放就是整台表。</p>
   </div>
 
   <section class="panel">
@@ -536,7 +551,11 @@ function audioReady() {
   if (sndMode() === "off") return null;
   try {
     // AudioContext 必須在使用者手勢之後才能建立／恢復
-    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (!ctx) {
+      // iPhone 側邊靜音鍵打開時，網頁音效預設會被靜音。宣告成「播放」類型才會照樣出聲（iOS 17+）
+      if (navigator.audioSession) navigator.audioSession.type = "playback";
+      ctx = new (window.AudioContext || window.webkitAudioContext)();
+    }
     if (ctx.state === "suspended") ctx.resume();
     return ctx;
   } catch (_) { return null; }
@@ -832,6 +851,7 @@ function hire() {
   lastFare = b0.total; lastWaitUnits = 0;
 
   $("rateBox").open = false;
+  window.scrollTo({ top: 0, behavior: "smooth" });   // 剛從設定打開試跑模式的話，表頭可能在畫面外
   keyBeep(); beep(2730, 0.055, 0.10, 0.12);
   say("歡迎搭乘，請繫好安全帶。起程運價 " + b0.total + " 元。");
   keepAwake(true);
@@ -886,7 +906,10 @@ const KEYS = { kGo: hire, kPause: pause, kPay: pay, kFree: () => clear(false) };
 for (const [id, fn] of Object.entries(KEYS)) {
   const el = $(id);
   el.addEventListener("click", fn);
-  el.addEventListener("pointerdown", () => el.classList.add("down"));
+  el.addEventListener("pointerdown", () => {
+    el.classList.add("down");
+    try { navigator.vibrate?.(12); } catch (_) { /* iPhone 不支援震動 */ }
+  });
   for (const ev of ["pointerup", "pointerleave", "pointercancel"]) el.addEventListener(ev, () => el.classList.remove("down"));
 }
 
@@ -902,6 +925,14 @@ if (full) {
     } catch (_) { /* 不支援鎖定方向就維持原樣 */ }
   });
 }
+
+const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+if (isIOS && !navigator.standalone) $("iosHint").hidden = false;
+
+// 計費中不小心關掉或重新整理，先問一聲
+window.addEventListener("beforeunload", (e) => {
+  if (state === "running" || state === "paused") { e.preventDefault(); e.returnValue = ""; }
+});
 
 /* ── 收據（只畫在畫面上，沒有存到任何地方） ────────────── */
 function fmtTime(ts) {
