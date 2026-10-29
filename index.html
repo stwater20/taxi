@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
 <meta name="color-scheme" content="dark">
-<meta name="description" content="手機變成台灣計程車跳表：紅色 LED、空車燈、跳表嗶聲、語音播報、列印收據。純前端運算，不連線、不記錄、不上傳任何位置資料。">
+<meta name="description" content="手機變成台灣計程車跳表：橘色 LED、空車燈、跳表嗶聲、語音播報、列印收據。純前端運算，不連線、不記錄、不上傳任何位置資料。">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23FFD400'/%3E%3Crect x='5' y='10' width='22' height='12' rx='2.5' fill='%230E1014'/%3E%3Crect x='8.5' y='13.5' width='4' height='5' fill='%23FF8A1C'/%3E%3Crect x='14' y='13.5' width='4' height='5' fill='%23FF8A1C'/%3E%3Crect x='19.5' y='13.5' width='4' height='5' fill='%23FF8A1C'/%3E%3C/svg%3E">
 <meta name="theme-color" content="#0B0C0E">
@@ -16,243 +16,358 @@
 <title>跳表 · 計程車計費表</title>
 <style>
 :root{
-  --asphalt:#0B0C0E;
-  --plastic:#1B1D21;
-  --plastic-hi:#2A2D33;
-  --glass:#0C0602;
+  --bg:#0A0B0D;
+  --surface:#141619;
+  --surface-2:#1C1F23;
+  --line:rgba(255,255,255,.075);
+  --text:#ECEEF1;
+  --text-2:#A6ADB7;
+  --text-3:#6D7581;
+  --taxi:#FFD400;
+  --glass:#0B0602;
   --led:#FF8A1C;
   --led-off:rgba(255,138,28,.07);
   --led-glow:rgba(255,138,28,.6);
-  --taxi:#FFD400;
-  --paper:#F4F1EA;
+  --led-label:#8E5222;
+  --vacant:#FF3B2A;
+  --paper:#F7F5EF;
   --ink:#1E1C19;
-  --edge:rgba(255,255,255,.09);
-  --mute:#7C848F;
+  --radius:16px;
   --font-ui:-apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif;
   --font-mono:ui-monospace,"SF Mono",Menlo,Consolas,"Roboto Mono",monospace;
 }
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
 body{
-  background:var(--asphalt);
-  color:#E7EAEE;
+  min-height:100vh;
+  background:radial-gradient(130% 55% at 50% -8%,#211B12 0%,rgba(10,11,13,0) 62%),var(--bg);
+  background-color:var(--bg);
+  color:var(--text);
   font-family:var(--font-ui);
   -webkit-text-size-adjust:100%;
   -webkit-tap-highlight-color:transparent;
-  padding:calc(14px + env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) calc(28px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+  padding:calc(12px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) calc(32px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
   overscroll-behavior-y:none;   /* 行車中誤觸下拉重新整理，整趟就沒了 */
   display:flex;justify-content:center;
 }
 .shell{width:100%;max-width:460px}
+button{font-family:inherit}
+svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;display:block}
 
-/* ── 擋風玻璃的「空車」燈 ───────────── */
-.flag{
-  display:flex;justify-content:center;margin:0 auto 12px;
+/* ── App bar ─────────────────────────── */
+.appbar{display:flex;align-items:center;gap:11px;margin-bottom:16px}
+.logo{width:36px;height:36px;display:block;flex:none;filter:drop-shadow(0 4px 10px rgba(255,212,0,.18))}
+.wordmark b{display:block;font-size:18px;font-weight:800;letter-spacing:.12em;line-height:1.1}
+.wordmark small{display:block;font-size:9.5px;letter-spacing:.34em;color:var(--text-3);font-weight:600;margin-top:2px}
+.actions{margin-left:auto;display:flex;gap:8px}
+.iconbtn{
+  width:42px;height:42px;border-radius:13px;display:grid;place-items:center;cursor:pointer;
+  background:var(--surface);border:1px solid var(--line);color:var(--text-2);
+  transition:background .15s,color .15s;
 }
-.flag span{
-  font-size:30px;font-weight:900;letter-spacing:.32em;padding:6px 10px 6px 20px;
-  border-radius:8px;border:2px solid #2B1110;background:#120606;
-  color:#3A1612;transition:color .25s,text-shadow .25s,border-color .25s;
+.iconbtn:hover{color:var(--text);background:var(--surface-2)}
+.iconbtn:focus-visible{outline:2px solid var(--taxi);outline-offset:2px}
+
+/* ── 擋風玻璃的「空車」燈：紅色點陣 LED ─────── */
+.placard{
+  position:relative;width:max-content;margin:0 auto 16px;padding:6px 16px 6px 22px;
+  background:#0A0505;border-radius:10px;
+  box-shadow:inset 0 0 0 1px #2A1312,inset 0 0 0 4px #050303,0 8px 20px rgba(0,0,0,.5);
+  overflow:hidden;
 }
-.flag[data-on="1"] span{
-  color:#FF4A30;border-color:#5A1A14;
-  text-shadow:0 0 6px rgba(255,74,48,.9),0 0 22px rgba(255,74,48,.55);
+.placard span{
+  display:block;font-size:36px;font-weight:900;letter-spacing:.32em;line-height:1.15;
+  color:#2B100D;transition:color .3s,text-shadow .3s;
 }
+.placard[data-on="1"] span{color:var(--vacant);text-shadow:0 0 8px rgba(255,59,42,.85),0 0 24px rgba(255,59,42,.5)}
+.placard::after,.dm::after{ /* 把字切成一顆一顆的 LED */
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(circle at 50% 50%,transparent 1.05px,rgba(10,5,5,.72) 1.45px) 0 0/3px 3px;
+}
+.placard::after{inset:4px}
 
 /* ── 表頭本體 ───────────────────────── */
 .unit{
   position:relative;
-  background:linear-gradient(180deg,#2B2E33 0%,#1B1D21 38%,#141518 100%);
-  border:1px solid #33363C;border-radius:16px;
-  padding:12px 12px 14px;
-  box-shadow:0 18px 40px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.08);
+  background:
+    linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,0) 22%),
+    linear-gradient(180deg,#26292E 0%,#16181B 45%,#101113 100%);
+  border-radius:20px;padding:10px 10px 12px;
+  box-shadow:0 0 0 1px #000,inset 0 1px 0 rgba(255,255,255,.09),inset 0 -2px 0 rgba(0,0,0,.5),0 28px 56px rgba(0,0,0,.6);
 }
-.screw{position:absolute;width:9px;height:9px;border-radius:50%;
-  background:radial-gradient(circle at 35% 35%,#6B7079,#2A2C30 70%);box-shadow:0 1px 1px rgba(0,0,0,.6)}
-.screw::after{content:"";position:absolute;left:1.5px;right:1.5px;top:4px;height:1px;background:#15161A;transform:rotate(35deg)}
-.screw.tl{left:7px;top:7px}.screw.tr{right:7px;top:7px}.screw.bl{left:7px;bottom:7px}.screw.br{right:7px;bottom:7px}
-
-.brand{display:flex;align-items:center;justify-content:space-between;padding:0 12px 9px;
-  font-size:10.5px;letter-spacing:.32em;color:#A9AFB8;font-weight:700}
-.brand .model{font-family:var(--font-mono);letter-spacing:.12em;color:#6C727C;font-weight:500}
+.brand{display:flex;align-items:center;gap:10px;padding:2px 8px 9px}
+.brand b{font-size:11px;letter-spacing:.3em;color:#C2C7CE;font-weight:800;white-space:nowrap}
+.brand em{font-style:normal;font-size:8.5px;letter-spacing:.34em;color:#666C75;font-weight:700}
+.grille{margin-left:auto;width:44px;height:12px;background:radial-gradient(circle,#050506 0 1.15px,transparent 1.45px) 0 0/4px 4px}
+.model{font-family:var(--font-mono);font-size:9.5px;letter-spacing:.1em;color:#5F656E;white-space:nowrap}
 
 .glass{
-  background:radial-gradient(120% 140% at 50% 0%,#1A0C04 0%,var(--glass) 60%);
-  border:1px solid #000;border-radius:8px;
-  box-shadow:inset 0 3px 18px rgba(0,0,0,.95),0 1px 0 rgba(255,255,255,.06);
-  padding:10px 12px 12px;
   position:relative;overflow:hidden;
+  background:radial-gradient(120% 120% at 50% 0%,#1B0D04 0%,var(--glass) 62%);
+  border-radius:11px;padding:10px 12px 12px;
+  box-shadow:0 0 0 1px #000,inset 0 0 0 1px rgba(255,255,255,.035),inset 0 4px 20px rgba(0,0,0,.95),0 1px 0 rgba(255,255,255,.06);
 }
-.glass::before{ /* 壓克力反光 */
-  content:"";position:absolute;inset:0;pointer-events:none;
-  background:linear-gradient(115deg,rgba(255,255,255,.055) 0%,rgba(255,255,255,0) 32%);
+.glass::before{ /* 壓克力面板的反光 */
+  content:"";position:absolute;inset:0;pointer-events:none;z-index:2;
+  background:linear-gradient(112deg,rgba(255,255,255,.06) 0%,rgba(255,255,255,0) 30%);
 }
-.status{display:flex;gap:12px;justify-content:flex-start;flex-wrap:wrap;margin-bottom:6px}
-.st{display:flex;align-items:center;gap:5px;font-size:10.5px;letter-spacing:.14em;color:#5A3518;font-weight:700}
-.st i{width:7px;height:7px;border-radius:50%;background:#2A170B;display:block}
-.st.on{color:#FF6A52}
-.st.on i{background:#FF3B24;box-shadow:0 0 8px rgba(255,59,36,.6)}
-.st.on.g{color:#5CFF8A}.st.on.g i{background:#3BFF6E;box-shadow:0 0 8px rgba(59,255,110,.6)}
+
+.status{display:grid;grid-template-columns:repeat(5,1fr);gap:4px}
+.st{display:flex;flex-direction:column;align-items:center;gap:2px;color:#4D2C14;line-height:1.1;transition:color .2s}
+.st i{width:6px;height:6px;border-radius:50%;background:#2A170B;margin-bottom:2px;transition:background .2s,box-shadow .2s}
+.st b{font-size:10.5px;letter-spacing:.12em;font-weight:800}
+.st em{font-style:normal;font-size:7px;letter-spacing:.12em;font-weight:700;opacity:.85}
+.st.on{color:var(--led)}
+.st.on i{background:var(--led);box-shadow:0 0 8px var(--led-glow)}
+.st.on.r{color:#FF6A52}.st.on.r i{background:var(--vacant);box-shadow:0 0 8px rgba(255,59,42,.65)}
+.st.on.g{color:#5CF08E}.st.on.g i{background:#34E07A;box-shadow:0 0 8px rgba(52,224,122,.6)}
 .st.on.y{color:#FFD84A}.st.on.y i{background:#FFD020;box-shadow:0 0 8px rgba(255,208,32,.6)}
 
-.main{display:flex;flex-direction:column;align-items:flex-end;gap:2px}
-.lbl{font-size:10px;letter-spacing:.2em;color:#8A4A1E;font-weight:700;white-space:nowrap}
-.main .lbl{align-self:flex-start;font-size:11px}
+/* 點陣訊息列 */
+.dm{
+  position:relative;overflow:hidden;height:24px;margin:9px 0 8px;border-radius:4px;
+  background:#0A0502 radial-gradient(circle,rgba(255,138,28,.11) 0 .95px,transparent 1.25px) 0 0/3px 3px;
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.6);
+}
+.dm::after{background:radial-gradient(circle at 50% 50%,transparent .85px,rgba(10,5,2,.55) 1.2px) 0 0/2.5px 2.5px}
+.dm span{
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);white-space:nowrap;
+  font-size:15px;font-weight:900;letter-spacing:.14em;color:var(--led);
+  text-shadow:0 0 6px var(--led-glow);
+}
+.dm.scroll span{left:0;animation:marquee var(--t,10s) linear infinite}
+@keyframes marquee{from{transform:translate(var(--from),-50%)}to{transform:translate(var(--to),-50%)}}
+
+.lbl{display:flex;gap:6px;align-items:baseline;font-size:10px;letter-spacing:.18em;color:var(--led-label);font-weight:800;white-space:nowrap}
+.lbl em{font-style:normal;font-size:7.5px;letter-spacing:.2em;opacity:.8}
+.fareHead{display:flex;justify-content:space-between;align-items:baseline}
+.mainBox .seg7{justify-content:flex-end;margin-top:2px}
 .seg7{display:flex;gap:4px;transform:skewX(-6deg)}
 .seg7 svg{display:block}
-.big svg{width:min(17vw,62px);height:auto;aspect-ratio:55/78}
+.big svg{width:min(17vw,64px);height:auto;aspect-ratio:55/78}
 .sm{gap:2px}
-.sm svg{width:min(20px,calc((100vw - 90px) / 12 - 2.5px));height:auto;aspect-ratio:55/78}
-.seg7 .s{fill:var(--led-off)}
+.sm svg{width:min(20px,calc((100vw - 92px) / 12 - 2.5px));height:auto;aspect-ratio:55/78}
+.seg7 .s{fill:var(--led-off);transition:fill .06s}
 .seg7 .s.on{fill:var(--led);filter:drop-shadow(0 0 4px var(--led-glow))}
 .big.tick .s.on{animation:flash .25s ease-out}
 @keyframes flash{0%{filter:drop-shadow(0 0 16px rgba(255,150,40,1))}}
 .big.blink .s.on{animation:blinkon 1s steps(1) infinite}
 @keyframes blinkon{50%{opacity:.25}}
 
-.subs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:12px;
-  border-top:1px solid #2E1708;padding-top:9px}
-.subs>div{display:flex;flex-direction:column;align-items:center;gap:5px}
+.subs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:12px;border-top:1px solid #2B1608;padding-top:9px}
+.subs>div{display:flex;flex-direction:column;align-items:center;gap:6px}
 
-/* ── 按鍵 ───────────────────────────── */
-.keys{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-top:13px;padding:0 2px}
+/* ── 按鍵：薄膜按鍵 ─────────────────── */
+.keys{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-top:12px;padding:0 1px}
 .key{
-  appearance:none;font-family:inherit;cursor:pointer;
-  padding:15px 2px 13px;border-radius:9px;
-  border:1px solid #0D0E10;
-  background:linear-gradient(180deg,#3A3D44,#25272C);
-  color:#E9ECF0;font-size:16px;font-weight:800;letter-spacing:.1em;
-  box-shadow:0 4px 0 #0C0D0F,0 6px 10px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.12);
+  appearance:none;cursor:pointer;position:relative;
+  display:flex;flex-direction:column;align-items:center;gap:3px;
+  padding:11px 2px 10px;border-radius:11px;border:1px solid #0B0C0E;
+  background:linear-gradient(180deg,#383C43 0%,#2A2D33 55%,#24272C 100%);
+  color:#EEF0F3;
+  box-shadow:0 4px 0 #0A0B0C,0 7px 12px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.13);
   transition:transform .06s,box-shadow .06s;
-  position:relative;touch-action:manipulation;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;
+  touch-action:manipulation;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;
 }
-.key::before{content:"";position:absolute;left:28%;right:28%;top:6px;height:3px;border-radius:2px;background:var(--k,#666)}
-.key:active,.key.down{transform:translateY(3px);box-shadow:0 1px 0 #0C0D0F,0 2px 4px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.08)}
+.key svg.i{width:18px;height:18px;color:var(--k);filter:drop-shadow(0 0 5px color-mix(in srgb,var(--k) 45%,transparent))}
+.key b{font-size:16px;font-weight:800;letter-spacing:.12em;line-height:1.2}
+.key small{font-size:8px;font-weight:700;letter-spacing:.22em;color:#858C96}
+.key:active,.key.down{transform:translateY(3px);box-shadow:0 1px 0 #0A0B0C,0 2px 4px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.08)}
 .key:focus-visible{outline:2px solid var(--taxi);outline-offset:3px}
-.key[data-k="go"]{--k:#3BFF6E}
-.key[data-k="pause"]{--k:#FFB020}
-.key[data-k="pay"]{--k:#FF3B24}
-.key[data-k="free"]{--k:#9AA3AE}
-.key small{display:block;font-size:9px;font-weight:600;letter-spacing:.08em;color:#8B929C;margin-top:3px}
+.key[data-k="go"]{--k:#34E07A}
+.key[data-k="pause"]{--k:#FFC23A}
+.key[data-k="pay"]{--k:#FF5A3C}
+.key[data-k="free"]{--k:#AEB5BF}
 
-.slot{margin:14px 22% 0;height:6px;border-radius:3px;background:#050506;box-shadow:inset 0 2px 3px rgba(0,0,0,.9),0 1px 0 rgba(255,255,255,.06)}
+.tray{display:flex;align-items:center;gap:12px;margin-top:14px;padding:0 8px}
+.tray small{font-size:8px;letter-spacing:.22em;color:#5C626B;font-weight:700;white-space:nowrap}
+.slot{flex:1;height:6px;border-radius:3px;background:#050506;box-shadow:inset 0 2px 3px rgba(0,0,0,.9),0 1px 0 rgba(255,255,255,.06)}
+.seal{width:26px;height:15px;flex:none;opacity:.8}
 
-/* ── 表頭下方的狀態列 ───────────────── */
-.strip{display:flex;justify-content:space-between;gap:10px;margin:10px 4px 0;
-  font-family:var(--font-mono);font-size:11px;color:var(--mute)}
-.strip b{color:#C9CFD7;font-weight:500}
-
-/* ── 收據 ───────────────────────────── */
-.receiptWrap{display:flex;justify-content:center;margin-top:-2px}
+/* ── 收據：58mm 熱感紙 ───────────────── */
+.receiptWrap{display:flex;flex-direction:column;align-items:center;margin-top:-4px}
 .receipt{
-  width:min(84%,300px);background:var(--paper);color:var(--ink);
-  font-family:var(--font-mono);font-size:12.5px;line-height:1.7;
-  padding:16px 16px 20px;
-  box-shadow:0 10px 24px rgba(0,0,0,.5);
-  transform-origin:top;
+  width:min(78vw,244px);color:var(--ink);
+  background:linear-gradient(180deg,#E9E6DE 0,var(--paper) 14px,var(--paper) 100%);
+  font-family:var(--font-mono);font-size:11.5px;line-height:1.7;
+  padding:16px 15px 22px;
+  box-shadow:0 14px 28px rgba(0,0,0,.5);
   -webkit-mask:linear-gradient(#000 0 0) 0 0/100% calc(100% - 8px) no-repeat,
-    conic-gradient(from -45deg at 50% 100%,#0000,#000 1deg 89deg,#0000 90deg) 0 100%/12px 8px repeat-x;
+    conic-gradient(from -45deg at 50% 100%,#0000,#000 1deg 89deg,#0000 90deg) 0 100%/10px 8px repeat-x;
           mask:linear-gradient(#000 0 0) 0 0/100% calc(100% - 8px) no-repeat,
-    conic-gradient(from -45deg at 50% 100%,#0000,#000 1deg 89deg,#0000 90deg) 0 100%/12px 8px repeat-x;
+    conic-gradient(from -45deg at 50% 100%,#0000,#000 1deg 89deg,#0000 90deg) 0 100%/10px 8px repeat-x;
 }
 .receipt.printing{animation:print var(--dur,1.6s) steps(18) both}
 @keyframes print{from{clip-path:inset(0 0 100% 0);transform:translateY(-14px)}to{clip-path:inset(0 0 0 0);transform:none}}
-.receipt h2{margin:0;font-size:15px;letter-spacing:.24em;text-align:center;font-weight:800}
-.receipt .sub{text-align:center;font-size:10.5px;opacity:.6;margin:2px 0 10px;letter-spacing:.1em}
-.rule{border-top:1px dashed rgba(30,28,25,.5);margin:9px 0}
-.line{display:flex;justify-content:space-between;gap:12px}
+.receipt .rh{text-align:center;margin-bottom:8px}
+.receipt .rh svg{width:26px;height:26px;display:block;margin:0 auto 4px}
+.receipt h2{margin:0;font-size:16px;letter-spacing:.3em;font-weight:800;font-family:var(--font-ui)}
+.receipt .sub{font-size:9.5px;opacity:.6;letter-spacing:.14em;margin:1px 0 0}
+.rule{border-top:1px dashed rgba(30,28,25,.45);margin:8px 0}
+.line{display:flex;justify-content:space-between;gap:10px}
+.line span:first-child{opacity:.75}
 .line span:last-child{font-variant-numeric:tabular-nums}
-.total{font-size:20px;font-weight:800;margin-top:2px}
-.receipt .thanks{text-align:center;margin-top:10px;letter-spacing:.14em;font-weight:700}
-.receipt .fine{font-size:10px;line-height:1.55;opacity:.6;margin-top:10px}
-.receipt .btn{width:100%;margin-top:12px;background:var(--ink);color:var(--paper);border-color:transparent;font-size:13px;padding:12px}
+.total{align-items:baseline;margin-top:2px}
+.total span:first-child{opacity:1;font-family:var(--font-ui);font-weight:800;letter-spacing:.2em;font-size:13px}
+.total span:last-child{font-size:22px;font-weight:800}
+.receipt .thanks{text-align:center;margin:10px 0 0;letter-spacing:.16em;font-weight:700;font-family:var(--font-ui);font-size:12px}
+.receipt .fine{font-size:9.5px;line-height:1.55;opacity:.55;margin:8px 0 0;text-align:center}
+.receiptActions{display:flex;gap:8px;margin-top:12px}
 
-/* ── 一般按鈕、設定 ─────────────────── */
+/* ── 狀態列 ─────────────────────────── */
+.chips{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+.chip{
+  display:inline-flex;align-items:center;gap:7px;padding:7px 11px;border-radius:999px;
+  background:var(--surface);border:1px solid var(--line);
+  font-size:11.5px;color:var(--text-2);font-family:var(--font-mono);
+}
+.chip i{width:7px;height:7px;border-radius:50%;background:#4A515B;flex:none}
+.chip[data-q="good"] i{background:#34E07A;box-shadow:0 0 6px rgba(52,224,122,.6)}
+.chip[data-q="fair"] i{background:#FFC23A}
+.chip[data-q="weak"] i{background:#FF5A3C}
+.chip[data-q="sim"] i{background:#5AB0FF}
+.chip[data-q="wait"] i{background:#FFC23A;animation:pulse 1s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.25}}
+.chip.note{margin-left:auto}
+
+/* ── 卡片 ───────────────────────────── */
+.card{margin-top:16px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px}
+.cardHead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.eyebrow{margin:0 0 4px;font-size:10.5px;letter-spacing:.24em;color:var(--text-3);font-weight:700}
+.card h2{margin:0;font-size:17px;font-weight:800;letter-spacing:.04em;line-height:1.35}
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:14px}
+.stats>div{background:#0F1113;border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.stats span{display:block;font-size:10.5px;color:var(--text-3);letter-spacing:.14em;font-weight:700}
+.stats b{display:block;font-size:19px;font-weight:800;margin-top:3px;font-variant-numeric:tabular-nums;letter-spacing:.02em}
+.stats em{display:block;font-style:normal;font-size:11px;color:var(--text-2);margin-top:1px}
+@media (min-width:420px){.stats{grid-template-columns:repeat(4,1fr)}.stats b{font-size:17px}}
+.updated{margin:12px 0 0;font-size:11px;line-height:1.65;color:var(--text-3)}
+.updated b{color:var(--text-2);font-weight:600}
+
 .btn{
-  appearance:none;font-family:inherit;font-size:14px;font-weight:700;letter-spacing:.1em;
-  padding:13px 10px;border-radius:10px;border:1px solid var(--edge);
-  background:#22262C;color:#E7EAEE;cursor:pointer;
+  appearance:none;cursor:pointer;font-size:14px;font-weight:700;letter-spacing:.08em;
+  padding:12px 16px;border-radius:12px;border:1px solid var(--line);
+  background:var(--surface-2);color:var(--text);
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;
 }
+.btn:hover{background:#23272C}
 .btn:focus-visible{outline:2px solid var(--taxi);outline-offset:2px}
-.tools{display:grid;grid-template-columns:1fr;gap:9px;margin-top:16px}
-.panel{margin-top:14px;background:var(--plastic);border:1px solid var(--edge);border-radius:14px;overflow:hidden}
-details>summary{
-  padding:13px 16px;font-size:12.5px;color:var(--mute);cursor:pointer;
-  letter-spacing:.06em;list-style:none;display:flex;justify-content:space-between;
-}
-summary::-webkit-details-marker{display:none}
-summary b{color:#C9CFD7;font-weight:600}
-.rates{padding:2px 16px 16px}
-select,input[type=text]{
-  width:100%;font-family:inherit;font-size:16px;
-  padding:11px 10px;border-radius:8px;border:1px solid var(--edge);
-  background:#06070A;color:#E7EAEE;margin-bottom:11px;
-}
-select:focus-visible,input[type=text]:focus-visible{outline:2px solid var(--taxi);outline-offset:1px}
-.updated{margin:0 0 15px;font-size:11px;line-height:1.65;color:var(--mute)}
-.updated b{color:#C9CFD7;font-weight:600}
-.hint{margin:6px 0 0;font-size:10.5px;line-height:1.6;color:var(--mute)}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
-.grid .span2{grid-column:1/-1}
-label{display:block;font-size:10.5px;color:var(--mute);letter-spacing:.09em;margin-bottom:5px}
-input[type=number]{
-  width:100%;font-family:var(--font-mono);font-size:16px;
-  padding:9px 10px;border-radius:8px;border:1px solid var(--edge);
-  background:#06070A;color:#E7EAEE;
-}
-input[type=number]:focus-visible{outline:2px solid var(--taxi);outline-offset:1px}
-.sep{margin:18px 0 10px;padding-top:14px;border-top:1px solid var(--edge);font-size:11px;letter-spacing:.2em;color:#C9CFD7;font-weight:600}
-.switch{display:flex;align-items:center;gap:9px;margin-top:11px;font-size:12.5px;color:#C9CFD7}
-.switch input{width:17px;height:17px;accent-color:var(--taxi);flex:none}
-.switch label{margin:0;font-size:12.5px;letter-spacing:0;color:inherit}
+.btn.primary{background:var(--taxi);color:#171200;border-color:transparent}
+.btn.primary:hover{background:#FFDD33}
+.btn.sm{padding:8px 13px;font-size:12.5px;border-radius:10px}
+.btn.wide{width:100%}
 
-.ledger{
-  border-top:1px solid var(--edge);padding:12px 16px;
-  font-family:var(--font-mono);font-size:11px;color:var(--mute);
-  display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;
-}
-.ledger b{color:#C9CFD7;font-weight:500}
+.ledger{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}
+.ledger>div{background:#0F1113;border:1px solid var(--line);border-radius:12px;padding:10px 8px;text-align:center}
+.ledger b{display:block;font-family:var(--font-mono);font-size:22px;font-weight:600;color:var(--text)}
 .ledger .zero{color:#3DDC97}
+.ledger span{display:block;font-size:10.5px;color:var(--text-3);letter-spacing:.08em;margin-top:2px}
+.card details{margin-top:12px;border-top:1px solid var(--line);padding-top:4px}
+.card summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;padding:8px 0;font-size:13px;color:var(--text-2);font-weight:600}
+.card summary::-webkit-details-marker{display:none}
+.card summary::after{content:"";width:8px;height:8px;border-right:2px solid var(--text-3);border-bottom:2px solid var(--text-3);transform:rotate(45deg);margin-right:4px;transition:transform .2s}
+.card details[open] summary::after{transform:rotate(-135deg)}
+.card summary:focus-visible{outline:2px solid var(--taxi);outline-offset:2px;border-radius:4px}
+.card ul{margin:4px 0 4px;padding-left:18px;font-size:12.5px;line-height:1.8;color:var(--text-2)}
+
+/* ── 設定面板（底部抽屜） ───────────── */
+dialog.sheet{
+  padding:0;border:0;color:var(--text);background:#15171B;
+  width:100%;max-width:520px;max-height:min(88vh,860px);
+  margin:auto auto 0;border-radius:22px 22px 0 0;
+  box-shadow:0 -10px 40px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.07);
+}
+dialog.sheet[open]{display:flex;flex-direction:column;animation:sheetUp .26s cubic-bezier(.2,.8,.2,1)}
+dialog.sheet::backdrop{background:rgba(0,0,0,.62)}
+@keyframes sheetUp{from{transform:translateY(40px);opacity:0}}
+@media (min-width:600px){dialog.sheet{margin:auto;border-radius:22px}}
+.sheetHead{display:flex;align-items:center;justify-content:space-between;padding:10px 16px 10px 20px;border-bottom:1px solid var(--line)}
+.sheetHead::before{content:"";position:absolute;left:50%;top:7px;width:38px;height:4px;border-radius:2px;background:#3A3F46;transform:translateX(-50%)}
+.sheetHead h2{margin:8px 0 0;font-size:17px;letter-spacing:.06em}
+.sheetBody{overflow:auto;padding:4px 20px 8px;-webkit-overflow-scrolling:touch}
+.sheetBody section{padding:16px 0;border-bottom:1px solid var(--line)}
+.sheetBody section:last-child{border-bottom:0}
+.sheetBody h3{margin:0 0 12px;font-size:11px;letter-spacing:.26em;color:var(--text-3);font-weight:700}
+.sheetFoot{padding:12px 20px calc(12px + env(safe-area-inset-bottom));border-top:1px solid var(--line)}
+label.fl{display:block;font-size:11px;color:var(--text-3);letter-spacing:.08em;margin-bottom:6px;font-weight:600}
+select,input[type=text],input[type=number]{
+  width:100%;font-size:16px;padding:11px 12px;border-radius:10px;border:1px solid var(--line);
+  background:#0C0D0F;color:var(--text);
+}
+select,input[type=text]{font-family:inherit}
+input[type=number]{font-family:var(--font-mono)}
+select:focus-visible,input[type=text]:focus-visible,input[type=number]:focus-visible{outline:2px solid var(--taxi);outline-offset:1px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 10px;margin-top:14px}
+.grid .span2{grid-column:1/-1}
+.hint{margin:7px 0 0;font-size:11px;line-height:1.6;color:var(--text-3)}
+
+.seg{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;padding:3px;background:#0C0D0F;border:1px solid var(--line);border-radius:12px}
+.seg label{position:relative;cursor:pointer}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg span{display:block;text-align:center;padding:9px 4px;border-radius:9px;font-size:13px;color:var(--text-2);font-weight:600;transition:background .15s,color .15s}
+.seg span small{display:block;font-size:10px;font-weight:500;color:var(--text-3);margin-top:1px}
+.seg input:checked+span{background:#2A2E35;color:var(--text);box-shadow:0 1px 0 rgba(255,255,255,.06) inset}
+.seg input:focus-visible+span{outline:2px solid var(--taxi);outline-offset:1px}
+
+.toggle{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 0;cursor:pointer}
+.toggle+.toggle{border-top:1px solid var(--line)}
+.toggle span{font-size:14px;font-weight:600;line-height:1.4}
+.toggle span small{display:block;font-size:11.5px;color:var(--text-3);font-weight:400;margin-top:2px}
+.toggle input{
+  appearance:none;-webkit-appearance:none;flex:none;margin:0;cursor:pointer;
+  width:46px;height:28px;border-radius:14px;background:#2C3036;position:relative;transition:background .18s;
+}
+.toggle input::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.4);transition:transform .18s}
+.toggle input:checked{background:var(--taxi)}
+.toggle input:checked::after{transform:translateX(18px)}
+.toggle input:focus-visible{outline:2px solid var(--taxi);outline-offset:2px}
 
 /* ── 頁尾 ───────────────────────────── */
-footer{margin-top:20px;font-size:11.5px;line-height:1.85;color:var(--mute)}
-footer h3{margin:0 0 7px;font-size:11px;letter-spacing:.2em;color:#C9CFD7;font-weight:600}
-footer ul{margin:0;padding-left:17px}
-footer li{margin-bottom:3px}
-.disclaim{margin-top:14px;padding-top:13px;border-top:1px solid var(--edge);color:#5F6773}
+footer{margin-top:24px;font-size:12px;line-height:1.8;color:var(--text-3)}
+footer h3{margin:0 0 8px;font-size:10.5px;letter-spacing:.24em;color:var(--text-2);font-weight:700}
 footer a{color:var(--taxi);text-decoration:none;border-bottom:1px solid rgba(255,212,0,.3)}
 footer a:hover{border-bottom-color:var(--taxi)}
 footer a:focus-visible{outline:2px solid var(--taxi);outline-offset:3px;border-radius:2px}
-.more{margin-top:18px;padding-top:15px;border-top:1px solid var(--edge)}
-.more ul{list-style:none;padding:0;margin:0}
-.more li{margin-bottom:7px;line-height:1.6}
-.more .why{color:#5F6773;display:block;font-size:11px}
-.more .home{margin:11px 0 0;font-size:11px;color:#5F6773}
-.gh{margin-top:18px;padding-top:15px;border-top:1px solid var(--edge)}
-.gh p{margin:0 0 8px;line-height:1.75}
-.gh .star{margin-bottom:0;color:#C9CFD7}
-.disclaim b{color:#8A929E;font-weight:600}
-.err{margin:12px 0 0;padding:11px 13px;border-radius:9px;background:rgba(228,87,46,.14);border:1px solid rgba(228,87,46,.4);color:#FFB49C;font-size:12.5px;line-height:1.6}
+footer section{padding:16px 0;border-top:1px solid var(--line)}
+footer ul{list-style:none;padding:0;margin:0}
+footer li{margin-bottom:8px;line-height:1.6}
+footer .why{display:block;font-size:11.5px;color:#59606B}
+footer p{margin:0 0 8px}
+.disclaim{font-size:11px;color:#59606B}
+.disclaim b{color:#88909B;font-weight:600}
+.err{margin:12px 0 0;padding:11px 13px;border-radius:12px;background:rgba(228,87,46,.12);border:1px solid rgba(228,87,46,.4);color:#FFB49C;font-size:12.5px;line-height:1.6}
 [hidden]{display:none !important}
 
-/* 手機橫放在儀表板上：表頭佔滿畫面，數字放大 */
+/* ── 手機橫放在儀表板上：整台表塞滿一個畫面 ── */
 @media (orientation:landscape) and (max-height:520px){
   body{padding:max(6px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 20px max(12px, env(safe-area-inset-left))}
-  .shell{max-width:900px}
-  .flag{display:none}
-  .unit{padding:7px 10px 10px;border-radius:12px}
-  .screw{display:none}
-  .brand{padding:0 6px 5px;font-size:9.5px}
-  .glass{display:grid;grid-template-columns:auto 1fr;column-gap:16px;align-items:end;padding:7px 12px 9px}
-  .status{grid-column:1/-1;margin-bottom:2px}
-  .big svg{width:min(13vw,27vh,106px)}
-  .subs{grid-template-columns:1fr;margin:0;border:0;padding:0;gap:min(8px,1.6vh)}
+  .shell{max-width:920px}
+  .appbar,.placard,.tray{display:none}
+  .unit{padding:6px 10px 10px;border-radius:14px}
+  .brand{padding:0 6px 5px}
+  .glass{
+    display:grid;grid-template-columns:auto 1fr;column-gap:18px;align-items:end;
+    grid-template-areas:"st st" "dm dm" "main subs";padding:7px 12px 9px;
+  }
+  .status{grid-area:st;display:flex;gap:16px}
+  .st{flex-direction:row;gap:5px}
+  .st i{margin:0}
+  .dm{grid-area:dm;height:20px;margin:6px 0 6px}
+  .dm span{font-size:13px}
+  .mainBox{grid-area:main}
+  .big svg{width:min(12.5vw,25vh,104px)}
+  .subs{grid-area:subs;grid-template-columns:1fr;margin:0;border:0;padding:0;gap:min(8px,1.6vh)}
   .subs>div{flex-direction:row;justify-content:flex-end;gap:12px}
-  .sm svg{width:min(4.6vw,8vh,28px)}
-  .keys{margin-top:9px;gap:8px}
-  .key{padding:min(14px,3.4vh) 2px min(12px,3vh);font-size:15px}
-  .key::before{top:4px}
-  .slot{display:none}
+  .sm svg{width:min(4.4vw,7.6vh,28px)}
+  .keys{margin-top:8px;gap:8px}
+  .key{flex-direction:row;justify-content:center;gap:7px;padding:min(13px,3.2vh) 2px}
+  .key small{display:none}
+}
+@media (max-width:360px){
+  .appbar{margin-bottom:12px}
+  .placard{margin-bottom:12px}
+  .placard span{font-size:29px}
+  .brand em{display:none}
 }
 @media (prefers-reduced-motion:reduce){*{animation:none !important;transition:none !important}}
 </style>
@@ -264,119 +379,125 @@ footer a:focus-visible{outline:2px solid var(--taxi);outline-offset:3px;border-r
     <div class="err" style="margin:0 0 12px">這個跳表需要 JavaScript 才能讀取 GPS 與計算車資。請在瀏覽器設定中開啟 JavaScript 後重新載入。程式仍然只在你的裝置上執行，不會連線。</div>
   </noscript>
 
-  <div class="flag" id="flag" data-on="1" aria-live="polite"><span>空車</span></div>
+  <header class="appbar">
+    <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#FFD400"/><rect x="5" y="10" width="22" height="12" rx="2.5" fill="#0E1014"/><rect x="8.5" y="13.5" width="4" height="5" fill="#FF8A1C"/><rect x="14" y="13.5" width="4" height="5" fill="#FF8A1C"/><rect x="19.5" y="13.5" width="4" height="5" fill="#FF8A1C"/></svg>
+    <div class="wordmark"><b>跳表</b><small>TAXI METER</small></div>
+    <div class="actions">
+      <button class="iconbtn" type="button" id="btnFull" aria-label="全螢幕" title="全螢幕" hidden>
+        <svg class="i" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+      </button>
+      <button class="iconbtn" type="button" id="btnSettings" aria-label="設定" title="設定">
+        <svg class="i" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2.2"/><circle cx="10" cy="17" r="2.2"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="placard" id="flag" data-on="1" aria-live="polite"><span>空車</span></div>
 
   <main class="unit" id="unit">
-    <span class="screw tl"></span><span class="screw tr"></span><span class="screw bl"></span><span class="screw br"></span>
-    <div class="brand"><span>計程車計費表</span><span class="model">TX-26</span></div>
+    <div class="brand">
+      <b>計程車計費表</b><em>TAXIMETER</em>
+      <span class="grille" aria-hidden="true"></span>
+      <span class="model">TX-26</span>
+    </div>
 
     <div class="glass">
       <div class="status">
-        <span class="st" id="ledFree"><i></i>空車</span>
-        <span class="st g" id="ledHire"><i></i>載客</span>
-        <span class="st y" id="ledPause"><i></i>暫停</span>
-        <span class="st y" id="ledNight"><i></i>夜間</span>
-        <span class="st y" id="ledExtra"><i></i>加成</span>
+        <span class="st r" id="ledFree"><i></i><b>空車</b><em>VACANT</em></span>
+        <span class="st g" id="ledHire"><i></i><b>載客</b><em>HIRED</em></span>
+        <span class="st y" id="ledPause"><i></i><b>暫停</b><em>STOP</em></span>
+        <span class="st" id="ledNight"><i></i><b>夜間</b><em>NIGHT</em></span>
+        <span class="st" id="ledExtra"><i></i><b>加成</b><em>EXTRA</em></span>
       </div>
-      <div class="main">
-        <span class="lbl" id="mainLbl">時間</span>
+      <div class="dm" id="dm" aria-live="polite"><span id="dmText"></span></div>
+      <div class="mainBox">
+        <div class="fareHead">
+          <span class="lbl" id="mainLbl">時間<em>TIME</em></span>
+          <span class="lbl" id="mainUnit"></span>
+        </div>
         <div class="seg7 big" id="dFare" role="img" aria-label="車資"></div>
       </div>
       <div class="subs">
-        <div><span class="lbl">里程 KM</span><div class="seg7 sm" id="dDist"></div></div>
-        <div><span class="lbl">延滯 分.秒</span><div class="seg7 sm" id="dIdle"></div></div>
-        <div><span class="lbl">計時 分.秒</span><div class="seg7 sm" id="dTime"></div></div>
+        <div><span class="lbl">里程<em>KM</em></span><div class="seg7 sm" id="dDist"></div></div>
+        <div><span class="lbl">延滯<em>WAIT</em></span><div class="seg7 sm" id="dIdle"></div></div>
+        <div><span class="lbl">計時<em>TIME</em></span><div class="seg7 sm" id="dTime"></div></div>
       </div>
     </div>
 
     <div class="keys">
-      <button class="key" type="button" data-k="go" id="kGo">載客<small>開始</small></button>
-      <button class="key" type="button" data-k="pause" id="kPause">暫停<small>停表</small></button>
-      <button class="key" type="button" data-k="pay" id="kPay">收費<small>印收據</small></button>
-      <button class="key" type="button" data-k="free" id="kFree">空車<small>歸零</small></button>
+      <button class="key" type="button" data-k="go" id="kGo" aria-label="載客，開始計費">
+        <svg class="i" viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z"/></svg><b>載客</b><small>HIRE</small>
+      </button>
+      <button class="key" type="button" data-k="pause" id="kPause" aria-label="暫停">
+        <svg class="i" viewBox="0 0 24 24"><path d="M9 5.5v13M15 5.5v13"/></svg><b>暫停</b><small>STOP</small>
+      </button>
+      <button class="key" type="button" data-k="pay" id="kPay" aria-label="收費並列印乘車證明">
+        <svg class="i" viewBox="0 0 24 24"><path d="M6 3.5h12v17l-3-2-3 2-3-2-3 2zM9.5 8.5h5M9.5 12h5"/></svg><b>收費</b><small>PAY</small>
+      </button>
+      <button class="key" type="button" data-k="free" id="kFree" aria-label="空車，歸零">
+        <svg class="i" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.6-5.9M4 4.5v4.5h4.5"/></svg><b>空車</b><small>RESET</small>
+      </button>
     </div>
-    <div class="slot"></div>
+    <div class="tray">
+      <small>乘車證明</small>
+      <span class="slot"></span>
+      <svg class="seal" viewBox="0 0 26 15" aria-hidden="true"><path d="M1 3.5c5 0 7 7.5 12 7.5s7-7.5 12-7.5" fill="none" stroke="#7F848B" stroke-width="1"/><circle cx="13" cy="10.5" r="3.6" fill="#6E7279"/><circle cx="12" cy="9.6" r="1.1" fill="#9A9EA4"/></svg>
+    </div>
   </main>
 
-  <div class="receiptWrap"><section class="receipt" id="receipt" hidden aria-live="polite"></section></div>
+  <div class="receiptWrap">
+    <section class="receipt" id="receipt" hidden aria-live="polite"></section>
+    <div class="receiptActions" id="receiptActions" hidden>
+      <button class="btn sm" type="button" id="btnCopy">
+        <svg class="i" viewBox="0 0 24 24" style="width:16px;height:16px"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg>
+        <span>複製明細</span>
+      </button>
+    </div>
+  </div>
 
-  <div class="strip">
-    <span id="sig">定位未啟動</span>
-    <span id="note">按「載客」開始跳表</span>
+  <div class="chips">
+    <span class="chip" id="sigChip" data-q="off"><i></i><span id="sig">定位未啟動</span></span>
+    <span class="chip note" id="note">按「載客」開始跳表</span>
   </div>
 
   <div class="err" id="err" hidden></div>
 
-  <div class="tools">
-    <button class="btn" type="button" id="btnFull" hidden>全螢幕（手機橫放在儀表板上更像）</button>
-    <p class="hint" id="iosHint" hidden>iPhone 要全螢幕：在 Safari 按「分享」→「加入主畫面」，之後從主畫面的「跳表」圖示打開，就沒有網址列了。手機橫放就是整台表。</p>
-  </div>
-
-  <section class="panel">
-    <details id="rateBox">
-      <summary><span>費率與聲音設定</span><b id="rateName">北北基</b></summary>
-      <div class="rates">
-        <label for="presetSel">你在哪個縣市搭車</label>
-        <select id="presetSel"></select>
-        <p class="updated">費率資料更新於 <b id="rateDate"></b>，依各縣市政府公告整理。<br>費率隨時可能調整，實際車資請以車上的計程表為準。</p>
-        <div class="grid">
-          <div><label for="fBase">起程運價 元</label><input type="number" id="fBase" min="0" step="1"></div>
-          <div><label for="fBaseD">起程距離 公尺</label><input type="number" id="fBaseD" min="1" step="50"></div>
-          <div><label for="fStepD">續程每 公尺</label><input type="number" id="fStepD" min="1" step="10"></div>
-          <div><label for="fStep">續程加收 元</label><input type="number" id="fStep" min="0" step="1"></div>
-          <div><label for="fWaitS">延滯每 秒</label><input type="number" id="fWaitS" min="1" step="5"></div>
-          <div><label for="fWait">延滯加收 元</label><input type="number" id="fWait" min="0" step="1"></div>
-          <div><label for="fNight">夜間加成 元</label><input type="number" id="fNight" min="0" step="1"></div>
-          <div><label for="fNightP">夜間加成 ％</label><input type="number" id="fNightP" min="0" step="1"></div>
-          <div class="span2"><label for="fExtra">春節／颱風假等加成 元</label><input type="number" id="fExtra" min="0" step="1">
-            <p class="hint">春節期間各縣市約加收 30–50 元；台南、高雄、屏東在颱風假時另加 50 元。實際金額看當年公告。</p></div>
-        </div>
-
-        <p class="sep">聲音</p>
-        <label for="sndSel">跳表聲</label>
-        <select id="sndSel">
-          <option value="beep">嗶（電子錶）</option>
-          <option value="click">喀（機械繼電器）</option>
-          <option value="off">靜音</option>
-        </select>
-        <div class="switch">
-          <input type="checkbox" id="voice" checked>
-          <label for="voice">語音播報（歡迎搭乘、報車資、提醒隨身物品）</label>
-        </div>
-        <p class="hint" id="voiceHint">語音用的是手機內建的中文語音，不會連網。</p>
-
-        <p class="sep">其他</p>
-        <label for="plate">收據上的車號</label>
-        <input type="text" id="plate" value="TAX-0520" maxlength="10" autocomplete="off" spellcheck="false">
-        <div class="switch">
-          <input type="checkbox" id="wake" checked>
-          <label for="wake">計費期間保持螢幕開啟</label>
-        </div>
-        <div class="switch">
-          <input type="checkbox" id="sim">
-          <label for="sim">試跑模式：不用 GPS，模擬市區走走停停（在家先玩玩看）</label>
-        </div>
-      </div>
-    </details>
-
-    <div class="ledger">
-      <span>定位取樣 <b id="ledSamples">0</b></span>
-      <span>上傳伺服器 <b class="zero">0</b></span>
-      <span>寫入裝置 <b class="zero">0</b></span>
+  <section class="card" aria-labelledby="rateName">
+    <div class="cardHead">
+      <div><p class="eyebrow">目前費率</p><h2 id="rateName">台北・新北・基隆</h2></div>
+      <button class="btn sm" type="button" id="btnRate">更改</button>
     </div>
+    <div class="stats">
+      <div><span>起程</span><b id="rcBase"></b><em id="rcBaseD"></em></div>
+      <div><span>續程</span><b id="rcStep"></b><em id="rcStepD"></em></div>
+      <div><span>延滯</span><b id="rcWait"></b><em id="rcWaitS"></em></div>
+      <div><span>夜間</span><b id="rcNight"></b><em>23:00–06:00</em></div>
+    </div>
+    <p class="updated">費率資料更新於 <b id="rateDate"></b>，依各縣市政府公告整理。費率隨時可能調整，實際車資以車上的計程表為準。</p>
+  </section>
+
+  <section class="card" aria-labelledby="privTitle">
+    <p class="eyebrow">隱私</p>
+    <h2 id="privTitle">這個網站不會知道你去了哪裡</h2>
+    <div class="ledger">
+      <div><b id="ledSamples">0</b><span>定位取樣</span></div>
+      <div><b class="zero">0</b><span>上傳伺服器</span></div>
+      <div><b class="zero">0</b><span>寫入裝置</span></div>
+    </div>
+    <details>
+      <summary>怎麼做到的</summary>
+      <ul>
+        <li>車資是在你自己的手機裡算出來的，沒有送到任何地方去。</li>
+        <li>你的位置只用來量這一趟走了多遠，量完就丟掉。關掉這個頁面，什麼都不會留下。</li>
+        <li>不用註冊、沒有帳號、沒有廣告、不追蹤你。</li>
+        <li>不放心的話可以自己試：把網頁打開之後轉成飛航模式，跳表照樣會走 —— 因為它本來就不需要網路。</li>
+        <li>不想再讓它讀位置，隨時可以在手機的瀏覽器設定裡收回權限，這個網頁不會有任何意見。</li>
+      </ul>
+    </details>
   </section>
 
   <footer>
-    <h3>這個網站不會知道你去了哪裡</h3>
-    <ul>
-      <li>車資是在你自己的手機裡算出來的，沒有送到任何地方去。</li>
-      <li>你的位置只用來量這一趟走了多遠，量完就丟掉。關掉這個頁面，什麼都不會留下。</li>
-      <li>不用註冊、沒有帳號、沒有廣告、不追蹤你。</li>
-      <li>不放心的話可以自己試：把網頁打開之後轉成飛航模式，跳表照樣會走 —— 因為它本來就不需要網路。</li>
-      <li>不想再讓它讀位置，隨時可以在手機的瀏覽器設定裡收回權限，這個網頁不會有任何意見。</li>
-    </ul>
-
-    <section class="more">
+    <section>
       <h3>同場加映</h3>
       <ul>
         <li><a href="https://password.sectools.tw/" rel="noopener noreferrer">密碼外洩查詢與強度檢測</a>
@@ -386,19 +507,78 @@ footer a:focus-visible{outline:2px solid var(--taxi);outline-offset:3px;border-r
         <li><a href="https://typhoon.sectools.tw/" rel="noopener noreferrer">颱風假機率計算器</a>
           <span class="why">用停班停課的法規門檻加上近十年紀錄，估算明天到底放不放。</span></li>
       </ul>
-      <p class="home">全部工具在 <a href="https://sectools.tw/tools" rel="noopener noreferrer">sectools.tw/tools</a>，都是免費的</p>
+      <p>全部工具在 <a href="https://sectools.tw/tools" rel="noopener noreferrer">sectools.tw/tools</a>，都是免費的</p>
     </section>
 
-    <section class="gh">
+    <section>
       <h3>發現費率不對嗎？</h3>
       <p>各縣市的計程車費率隨時可能調整，我們不一定第一時間發現。如果你搭車時發現這裡算出來的跟車上的表差很多，或是你的縣市還沒被收錄，<a href="https://github.com/stwater20/taxi/issues" rel="noopener noreferrer">到這裡留言告訴我們</a>就可以，寫一句話也沒關係。</p>
       <p>如果你會寫程式，也非常歡迎直接發 Pull Request，改一行費率數字就是很棒的貢獻。</p>
-      <p class="star">覺得好用的話，順手到 <a href="https://github.com/stwater20/taxi" rel="noopener noreferrer">GitHub 幫我們按顆星星 ⭐</a> —— 這是我們繼續維護費率的動力。</p>
+      <p>覺得好用的話，順手到 <a href="https://github.com/stwater20/taxi" rel="noopener noreferrer">GitHub 幫我們按顆星星 ⭐</a> —— 這是我們繼續維護費率的動力。</p>
     </section>
 
-    <p class="disclaim">這是好玩用的仿真跳表，依各縣市公告費率估算。手機 GPS 量到的距離和車上計程表本來就會有落差，過隧道、走地下道、在高樓之間穿梭時落差會更明顯。<b>實際要付多少，一律以車上的計程表為準</b>，這裡的數字和收據不能拿來當作交易、報帳或申訴的依據。真的有爭議，記下車牌和時間，打 1999 或各縣市交通局的申訴專線。</p>
+    <section>
+      <p class="disclaim">這是好玩用的仿真跳表，依各縣市公告費率估算。手機 GPS 量到的距離和車上計程表本來就會有落差，過隧道、走地下道、在高樓之間穿梭時落差會更明顯。<b>實際要付多少，一律以車上的計程表為準</b>，這裡的數字和乘車證明不能拿來當作交易、報帳或申訴的依據。真的有爭議，記下車牌和時間，打 1999 或各縣市交通局的申訴專線。</p>
+    </section>
   </footer>
 </div>
+
+<dialog class="sheet" id="sheet" aria-labelledby="sheetTitle">
+  <div class="sheetHead">
+    <h2 id="sheetTitle">設定</h2>
+    <button class="iconbtn" type="button" id="sheetClose" aria-label="關閉">
+      <svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <div class="sheetBody">
+    <section>
+      <h3>費率</h3>
+      <label class="fl" for="presetSel">你在哪個縣市搭車</label>
+      <select id="presetSel"></select>
+      <div class="grid">
+        <div><label class="fl" for="fBase">起程運價 元</label><input type="number" id="fBase" min="0" step="1" inputmode="numeric"></div>
+        <div><label class="fl" for="fBaseD">起程距離 公尺</label><input type="number" id="fBaseD" min="1" step="50" inputmode="numeric"></div>
+        <div><label class="fl" for="fStepD">續程每 公尺</label><input type="number" id="fStepD" min="1" step="10" inputmode="numeric"></div>
+        <div><label class="fl" for="fStep">續程加收 元</label><input type="number" id="fStep" min="0" step="1" inputmode="numeric"></div>
+        <div><label class="fl" for="fWaitS">延滯每 秒</label><input type="number" id="fWaitS" min="1" step="5" inputmode="numeric"></div>
+        <div><label class="fl" for="fWait">延滯加收 元</label><input type="number" id="fWait" min="0" step="1" inputmode="numeric"></div>
+        <div><label class="fl" for="fNight">夜間加成 元</label><input type="number" id="fNight" min="0" step="1" inputmode="numeric"></div>
+        <div><label class="fl" for="fNightP">夜間加成 ％</label><input type="number" id="fNightP" min="0" step="1" inputmode="numeric"></div>
+        <div class="span2"><label class="fl" for="fExtra">春節／颱風假等加成 元</label><input type="number" id="fExtra" min="0" step="1" inputmode="numeric">
+          <p class="hint">春節期間各縣市約加收 30–50 元；台南、高雄、屏東在颱風假時另加 50 元。實際金額看當年公告。</p></div>
+      </div>
+    </section>
+
+    <section>
+      <h3>聲音</h3>
+      <div class="seg" role="radiogroup" aria-label="跳表聲">
+        <label><input type="radio" name="snd" value="beep" checked><span>嗶<small>電子錶</small></span></label>
+        <label><input type="radio" name="snd" value="click"><span>喀<small>機械繼電器</small></span></label>
+        <label><input type="radio" name="snd" value="off"><span>靜音<small>只看不聽</small></span></label>
+      </div>
+      <label class="toggle" style="margin-top:6px">
+        <span>語音播報<small id="voiceHint">歡迎搭乘、報車資、提醒隨身物品</small></span>
+        <input type="checkbox" id="voice" checked>
+      </label>
+    </section>
+
+    <section>
+      <h3>其他</h3>
+      <label class="fl" for="plate">乘車證明上的車號</label>
+      <input type="text" id="plate" value="TAX-0520" maxlength="10" autocomplete="off" spellcheck="false">
+      <label class="toggle" style="margin-top:6px">
+        <span>試跑模式<small>不用 GPS，模擬市區走走停停，在家先玩玩看</small></span>
+        <input type="checkbox" id="sim">
+      </label>
+      <label class="toggle">
+        <span>保持螢幕開啟<small>計費期間不讓手機自動關螢幕</small></span>
+        <input type="checkbox" id="wake" checked>
+      </label>
+      <p class="hint" id="iosHint" hidden>iPhone 要全螢幕：在 Safari 按「分享」→「加入主畫面」，之後從主畫面的「跳表」圖示打開，就沒有網址列了。手機橫放就是整台表。</p>
+    </section>
+  </div>
+  <div class="sheetFoot"><button class="btn primary wide" type="button" id="sheetDone">完成</button></div>
+</dialog>
 
 <script>
 "use strict";
@@ -545,7 +725,7 @@ function rate() {
    全部用 Web Audio 即時合成。不載入任何音檔，因為那會產生
    網路請求，這個專案不做這件事。                              */
 let ctx = null;
-const sndMode = () => $("sndSel").value;
+const sndMode = () => document.querySelector('input[name="snd"]:checked')?.value || "beep";
 
 function audioReady() {
   if (sndMode() === "off") return null;
@@ -670,6 +850,7 @@ let meters = 0, idleSec = 0, samples = 0;
 let last = null, lastFixAt = 0, curSpeed = 0, nightApplied = false, lastFare = 0;
 let lastWaitUnits = 0;
 let sim = { v: 0, target: 0, left: 0 };
+let tripNo = 0;
 
 function haversine(a, b) {
   const R = 6371008.8, rad = Math.PI / 180;
@@ -702,26 +883,79 @@ function breakdown() {
 }
 function led(id, on) { $(id).classList.toggle("on", on); }
 
+// 開機自我檢測：真的計費表一通電會把每一段都點亮一次
+let booting = true;
+
+// 點陣訊息列：字太長就像跑馬燈一樣捲動
+let dmCur = "";
+function setDm(text) {
+  if (text === dmCur) return;
+  dmCur = text;
+  const box = $("dm"), span = $("dmText");
+  span.textContent = text;
+  box.classList.remove("scroll");
+  const w = span.scrollWidth, room = box.clientWidth;
+  if (w > room - 12) {
+    box.style.setProperty("--from", (room - 24) + "px");
+    box.style.setProperty("--to", -w + "px");
+    box.style.setProperty("--t", ((room + w) / 42).toFixed(1) + "s");
+    void box.offsetWidth;
+    box.classList.add("scroll");
+  }
+}
+window.addEventListener("resize", () => { const t = dmCur; dmCur = ""; setDm(t); });
+
+function dmMessage(b) {
+  const r = b.r;
+  if (booting) return "SELF TEST　自我檢測中";
+  if (state === "idle") {
+    return "空車 VACANT　" + PRESETS[preset].name + "　起程 " + r.base + " 元 " + (r.baseDist / 1000) + " 公里　續程每 "
+      + r.stepDist + " 公尺 " + r.step + " 元　延滯每 " + r.waitSec + " 秒 " + r.wait + " 元";
+  }
+  if (state === "running") return "歡迎搭乘　請繫好安全帶" + (b.nightFee ? "　夜間加成" : "") + "　祝您旅途愉快";
+  if (state === "paused") return "暫停計費　PAUSED";
+  return "謝謝搭乘　車資 " + b.total + " 元　請記得您的隨身物品";
+}
+
+function renderRateCard(r) {
+  $("rcBase").textContent = r.base + " 元";
+  $("rcBaseD").textContent = (r.baseDist / 1000) + " 公里內";
+  $("rcStep").textContent = "+" + r.step + " 元";
+  $("rcStepD").textContent = "每 " + r.stepDist + " 公尺";
+  $("rcWait").textContent = "+" + r.wait + " 元";
+  $("rcWaitS").textContent = "每 " + r.waitSec + " 秒";
+  $("rcNight").textContent = r.nightPct ? "+" + r.nightPct + "%" : r.night ? "+" + r.night + " 元" : "無";
+}
+
 function update() {
   const b = breakdown();
   const big = $("dFare");
+  renderRateCard(b.r);
+  setDm(dmMessage(b));
+  $("ledSamples").textContent = samples;
+  if (booting) {
+    for (const show of [showFare, showDist, showIdle, showTime]) show("8.8.8.8.");
+    for (const id of ["ledFree", "ledHire", "ledPause", "ledNight", "ledExtra"]) led(id, true);
+    return;
+  }
   if (state === "idle") {
     // 空車時大螢幕顯示時鐘，冒號（小數點）每秒閃一下
     const d = new Date();
     const colon = d.getSeconds() % 2 === 0 ? "." : "";
     showFare(String(d.getHours()).padStart(2, "0") + colon + String(d.getMinutes()).padStart(2, "0"));
-    $("mainLbl").textContent = "時間";
+    $("mainLbl").innerHTML = "時間<em>TIME</em>";
+    $("mainUnit").textContent = "";
     big.setAttribute("aria-label", "目前時間");
   } else {
     showFare(String(b.total));
-    $("mainLbl").textContent = "車資 元";
+    $("mainLbl").innerHTML = "車資<em>FARE</em>";
+    $("mainUnit").innerHTML = "元<em>NT$</em>";
     big.setAttribute("aria-label", "車資 " + b.total + " 元");
   }
   big.classList.toggle("blink", state === "done");
   showDist((meters / 1000).toFixed(2));
   showIdle(segClock(idleSec));
   showTime(segClock(elapsed()));
-  $("ledSamples").textContent = samples;
 
   led("ledFree",  state === "idle");
   led("ledHire",  state === "running");
@@ -745,11 +979,11 @@ function update() {
   if (state !== "idle" && state !== "done") { lastFare = b.total; lastWaitUnits = b.waitUnits; }
 }
 
-function signal(text) { $("sig").textContent = text; }
+function signal(text, q) { $("sig").textContent = text; $("sigChip").dataset.q = q || "off"; }
 function gpsSignal(acc) {
-  if (acc == null) { signal("等待定位…"); return; }
-  const q = acc <= 10 ? "GPS 良好" : acc <= 25 ? "GPS 普通" : "GPS 微弱";
-  signal(q + " ±" + Math.round(acc) + " m");
+  if (acc == null) { signal("等待定位…", "wait"); return; }
+  const q = acc <= 10 ? "good" : acc <= 25 ? "fair" : "weak";
+  signal({ good: "GPS 良好", fair: "GPS 普通", weak: "GPS 微弱" }[q] + " ±" + Math.round(acc) + " m", q);
 }
 function fail(msg) {
   const el = $("err");
@@ -805,7 +1039,7 @@ function simStep() {
   lastFixAt = Date.now();
   curSpeed = sim.v;
   if (state === "running") meters += sim.v;
-  signal("試跑模式 · " + Math.round(sim.v * 3.6) + " km/h");
+  signal("試跑 · " + Math.round(sim.v * 3.6) + " km/h", "sim");
 }
 
 async function keepAwake(on) {
@@ -831,6 +1065,7 @@ setInterval(() => {
 
 /* ── 按鍵：載客 / 暫停 / 收費 / 空車 ─────────────────────── */
 function hire() {
+  if (booting) { booting = false; }
   if (state === "paused") {                       // 暫停 → 繼續
     state = "running"; keyBeep(); say("繼續計費"); update(); return;
   }
@@ -850,12 +1085,13 @@ function hire() {
   const b0 = computeFare(0, 0, r0, nightApplied);
   lastFare = b0.total; lastWaitUnits = 0;
 
-  $("rateBox").open = false;
+  closeSheet();
+  tripNo++;
   window.scrollTo({ top: 0, behavior: "smooth" });   // 剛從設定打開試跑模式的話，表頭可能在畫面外
   keyBeep(); beep(2730, 0.055, 0.10, 0.12);
   say("歡迎搭乘，請繫好安全帶。起程運價 " + b0.total + " 元。");
   keepAwake(true);
-  if (simulating) signal("試跑模式 · 0 km/h");
+  if (simulating) signal("試跑 · 0 km/h", "sim");
   else {
     gpsSignal(null);
     watchId = navigator.geolocation.watchPosition(onFix, onFixError, {
@@ -879,7 +1115,7 @@ function pay() {
   last = null;                                   // 立刻丟掉最後一組座標
   keepAwake(false);
   const b = breakdown();
-  signal(simulating ? "試跑結束" : "定位已關閉");
+  signal(simulating ? "試跑結束" : "定位已關閉", "off");
   $("note").textContent = "定位已停止，座標未留下";
   update();
   keyBeep(); beep(2730, 0.055, 0.10, 0.12); beep(2730, 0.055, 0.10, 0.24);
@@ -895,8 +1131,9 @@ function clear(silent) {
   last = null; curSpeed = 0; nightApplied = false; lastFare = 0; lastWaitUnits = 0;
   $("receipt").hidden = true;
   $("receipt").textContent = "";
+  $("receiptActions").hidden = true;
   $("err").hidden = true;
-  signal("定位未啟動");
+  signal("定位未啟動", "off");
   $("note").textContent = "按「載客」開始跳表";
   if (!silent) keyBeep();
   update();
@@ -912,6 +1149,21 @@ for (const [id, fn] of Object.entries(KEYS)) {
   });
   for (const ev of ["pointerup", "pointerleave", "pointercancel"]) el.addEventListener(ev, () => el.classList.remove("down"));
 }
+
+// 設定面板
+const sheet = $("sheet");
+function openSheet() {
+  if (sheet.showModal) sheet.showModal(); else sheet.setAttribute("open", "");
+}
+function closeSheet() {
+  if (!sheet.open) return;
+  if (sheet.close) sheet.close(); else sheet.removeAttribute("open");
+}
+$("btnSettings").addEventListener("click", openSheet);
+$("btnRate").addEventListener("click", openSheet);
+$("sheetClose").addEventListener("click", closeSheet);
+$("sheetDone").addEventListener("click", closeSheet);
+sheet.addEventListener("click", (e) => { if (e.target === sheet) closeSheet(); });   // 點背景關閉
 
 // 全螢幕：手機橫放時整個畫面就是一台表
 const full = document.documentElement.requestFullscreen ? "requestFullscreen"
@@ -943,22 +1195,25 @@ function fmtDate(ts) {
   const d = new Date(ts);
   return d.getFullYear() + "/" + String(d.getMonth() + 1).padStart(2, "0") + "/" + String(d.getDate()).padStart(2, "0");
 }
+let receiptText = "";
 function printReceipt(b) {
   const el = $("receipt");
   const plate = $("plate").value.trim() || "TAX-0520";
   const rows = [
-    ["起程 " + (b.r.baseDist / 1000).toFixed(2) + " km", b.r.base],
-    ["續程 " + b.stepUnits + " × " + b.r.step, b.stepFee],
-    ["延滯 " + b.waitUnits + " × " + b.r.wait, b.waitFee]
+    ["起程 " + (b.r.baseDist / 1000).toFixed(2) + "km", b.r.base],
+    ["續程 " + b.stepUnits + "×" + b.r.step, b.stepFee],
+    ["延滯 " + b.waitUnits + "×" + b.r.wait, b.waitFee]
   ];
   if (b.nightFee) rows.push([b.r.nightPct ? "夜間加成 " + b.r.nightPct + "%" : "夜間加成", b.nightFee]);
   if (b.r.extra) rows.push(["其他加成", b.r.extra]);
 
   el.textContent = "";
-  const h = document.createElement("h2"); h.textContent = "乘 車 收 據"; el.appendChild(h);
+  const head = document.createElement("div"); head.className = "rh";
+  head.innerHTML = '<svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#1E1C19"/><rect x="5" y="10" width="22" height="12" rx="2.5" fill="#F7F5EF"/><rect x="8.5" y="13.5" width="4" height="5" fill="#1E1C19"/><rect x="14" y="13.5" width="4" height="5" fill="#1E1C19"/><rect x="19.5" y="13.5" width="4" height="5" fill="#1E1C19"/></svg>';
+  const h = document.createElement("h2"); h.textContent = "乘車證明";
   const sub = document.createElement("p"); sub.className = "sub";
-  sub.textContent = PRESETS[preset].name + " 費率";
-  el.appendChild(sub);
+  sub.textContent = "TAXI RECEIPT · No." + String(tripNo).padStart(4, "0");
+  head.append(h, sub); el.appendChild(head);
 
   const add = (left, right, cls) => {
     const d = document.createElement("div"); d.className = "line" + (cls ? " " + cls : "");
@@ -968,6 +1223,7 @@ function printReceipt(b) {
   };
   const rule = () => el.appendChild(Object.assign(document.createElement("div"), { className: "rule" }));
   add("車號", plate);
+  add("費率", PRESETS[preset].name.replace(/（.*）/, ""));
   add("日期", fmtDate(startedAt));
   add("上車", fmtTime(startedAt));
   add("下車", fmtTime(endedAt));
@@ -978,30 +1234,20 @@ function printReceipt(b) {
   rule();
   for (const [k, v] of rows) add(k, v + " 元");
   rule();
-  add("車資", "NT$ " + b.total, "total");
+  add("車資", "NT$" + b.total, "total");
   el.appendChild(Object.assign(document.createElement("p"), { className: "thanks", textContent: "謝謝搭乘 · 一路平安" }));
+  el.appendChild(Object.assign(document.createElement("p"), { className: "fine",
+    textContent: "手機 GPS 估算，好玩用，非正式收據。沒有存進任何地方，重新整理就會消失。" }));
 
-  const fine = document.createElement("p"); fine.className = "fine";
-  fine.textContent = "手機 GPS 估算，好玩用，不是正式收據。這張收據沒有存進任何地方，重新整理就會消失。";
-  el.appendChild(fine);
+  receiptText = [
+    "乘車明細（估算）",
+    PRESETS[preset].name + " 費率 " + fmtTime(startedAt) + "-" + fmtTime(endedAt),
+    "里程 " + (meters / 1000).toFixed(2) + " km｜延滯 " + clock(idleSec),
+    ...rows.map(([k, v]) => k + " " + v + " 元"),
+    "合計 NT$" + b.total
+  ].join("\n");
 
-  const copy = document.createElement("button");
-  copy.className = "btn"; copy.type = "button"; copy.textContent = "複製明細文字";
-  copy.addEventListener("click", async () => {
-    const text = [
-      "乘車明細（估算）",
-      PRESETS[preset].name + " 費率 " + fmtTime(startedAt) + "-" + fmtTime(endedAt),
-      "里程 " + (meters / 1000).toFixed(2) + " km｜延滯 " + clock(idleSec),
-      ...rows.map(([k, v]) => k + " " + v + " 元"),
-      "合計 NT$" + b.total
-    ].join("\n");
-    try { await navigator.clipboard.writeText(text); copy.textContent = "已複製到剪貼簿"; }
-    catch (_) { copy.textContent = "複製失敗，請手動選取"; }
-    setTimeout(() => { copy.textContent = "複製明細文字"; }, 2200);
-  });
-  el.appendChild(copy);
-
-  // 從出紙口「印」出來
+  // 從出紙口一格一格「印」出來
   const dur = 1.8;
   el.style.setProperty("--dur", dur + "s");
   el.classList.remove("printing"); void el.offsetWidth;
@@ -1009,7 +1255,14 @@ function printReceipt(b) {
   el.classList.add("printing");
   el.style.animationDelay = ".35s";
   setTimeout(() => printerSound(dur), 350);
+  setTimeout(() => { $("receiptActions").hidden = false; }, 350 + dur * 1000);
 }
+$("btnCopy").addEventListener("click", async () => {
+  const label = $("btnCopy").querySelector("span");
+  try { await navigator.clipboard.writeText(receiptText); label.textContent = "已複製"; }
+  catch (_) { label.textContent = "複製失敗，請手動選取"; }
+  setTimeout(() => { label.textContent = "複製明細"; }, 2200);
+});
 
 /* ── 啟動 ─────────────────────────────────────────────── */
 // 必須等所有行程狀態變數宣告完才呼叫，否則 update() 會踩到暫時性死區
@@ -1017,6 +1270,7 @@ $("rateDate").textContent = RATES_UPDATED;
 selectPreset("taipei");
 $("fExtra").value = 0;
 update();
+setTimeout(() => { booting = false; update(); }, 1300);
 </script>
 </body>
 </html>
