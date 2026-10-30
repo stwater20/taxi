@@ -363,6 +363,10 @@ footer p{margin:0 0 8px}
   .key{flex-direction:row;justify-content:center;gap:7px;padding:min(13px,3.2vh) 2px}
   .key small{display:none}
 }
+/* 夜間自動調暗：真的計費表晚上也會降亮度，免得司機刺眼 */
+.unit,.placard{transition:filter .8s}
+body.dim .unit,body.dim .placard{filter:brightness(.6) saturate(.9)}
+
 @media (max-width:360px){
   .appbar{margin-bottom:12px}
   .placard{margin-bottom:12px}
@@ -425,16 +429,16 @@ footer p{margin:0 0 8px}
     </div>
 
     <div class="keys">
-      <button class="key" type="button" data-k="go" id="kGo" aria-label="載客，開始計費">
+      <button class="key" type="button" data-k="go" id="kGo" title="快捷鍵 1" aria-label="載客，開始計費">
         <svg class="i" viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z"/></svg><b>載客</b><small>HIRE</small>
       </button>
-      <button class="key" type="button" data-k="pause" id="kPause" aria-label="暫停">
+      <button class="key" type="button" data-k="pause" id="kPause" title="快捷鍵 2" aria-label="暫停">
         <svg class="i" viewBox="0 0 24 24"><path d="M9 5.5v13M15 5.5v13"/></svg><b>暫停</b><small>STOP</small>
       </button>
-      <button class="key" type="button" data-k="pay" id="kPay" aria-label="收費並列印乘車證明">
+      <button class="key" type="button" data-k="pay" id="kPay" title="快捷鍵 3" aria-label="收費並列印乘車證明">
         <svg class="i" viewBox="0 0 24 24"><path d="M6 3.5h12v17l-3-2-3 2-3-2-3 2zM9.5 8.5h5M9.5 12h5"/></svg><b>收費</b><small>PAY</small>
       </button>
-      <button class="key" type="button" data-k="free" id="kFree" aria-label="空車，歸零">
+      <button class="key" type="button" data-k="free" id="kFree" title="快捷鍵 4" aria-label="空車，歸零">
         <svg class="i" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.6-5.9M4 4.5v4.5h4.5"/></svg><b>空車</b><small>RESET</small>
       </button>
     </div>
@@ -448,6 +452,10 @@ footer p{margin:0 0 8px}
   <div class="receiptWrap">
     <section class="receipt" id="receipt" hidden aria-live="polite"></section>
     <div class="receiptActions" id="receiptActions" hidden>
+      <button class="btn sm primary" type="button" id="btnShare" hidden>
+        <svg class="i" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M12 3v12M7.5 7.5L12 3l4.5 4.5M5 13v6a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-6"/></svg>
+        <span>分享乘車證明</span>
+      </button>
       <button class="btn sm" type="button" id="btnCopy">
         <svg class="i" viewBox="0 0 24 24" style="width:16px;height:16px"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg>
         <span>複製明細</span>
@@ -474,6 +482,20 @@ footer p{margin:0 0 8px}
       <div><span>夜間</span><b id="rcNight"></b><em>23:00–06:00</em></div>
     </div>
     <p class="updated">費率資料更新於 <b id="rateDate"></b>，依各縣市政府公告整理。費率隨時可能調整，實際車資以車上的計程表為準。</p>
+  </section>
+
+  <section class="card" id="shiftCard" aria-labelledby="shiftTitle" hidden>
+    <div class="cardHead">
+      <div><p class="eyebrow">本班累計</p><h2 id="shiftTitle"></h2></div>
+      <button class="btn sm" type="button" id="btnShiftClear">清除</button>
+    </div>
+    <div class="stats">
+      <div><span>營收</span><b id="shRev"></b><em>車資合計</em></div>
+      <div><span>里程</span><b id="shKm"></b><em>載客里程</em></div>
+      <div><span>平均</span><b id="shAvg"></b><em>每趟車資</em></div>
+      <div><span>載客時間</span><b id="shTime"></b><em>時：分</em></div>
+    </div>
+    <p class="updated">跟計費表的營業累計一樣。只放在這個分頁的記憶體裡，關掉頁面就歸零。</p>
   </section>
 
   <section class="card" aria-labelledby="privTitle">
@@ -573,6 +595,10 @@ footer p{margin:0 0 8px}
       <label class="toggle">
         <span>保持螢幕開啟<small>計費期間不讓手機自動關螢幕</small></span>
         <input type="checkbox" id="wake" checked>
+      </label>
+      <label class="toggle">
+        <span>夜間自動調暗<small>晚上 6 點到早上 6 點降低亮度，開車不刺眼</small></span>
+        <input type="checkbox" id="dim" checked>
       </label>
       <p class="hint" id="iosHint" hidden>iPhone 要全螢幕：在 Safari 按「分享」→「加入主畫面」，之後從主畫面的「跳表」圖示打開，就沒有網址列了。手機橫放就是整台表。</p>
     </section>
@@ -851,6 +877,8 @@ let last = null, lastFixAt = 0, curSpeed = 0, nightApplied = false, lastFare = 0
 let lastWaitUnits = 0;
 let sim = { v: 0, target: 0, left: 0 };
 let tripNo = 0;
+// 本班累計：跟計費表的營業統計一樣，只放記憶體
+let shift = { trips: 0, meters: 0, revenue: 0, sec: 0 };
 
 function haversine(a, b) {
   const R = 6371008.8, rad = Math.PI / 180;
@@ -905,6 +933,14 @@ function setDm(text) {
 }
 window.addEventListener("resize", () => { const t = dmCur; dmCur = ""; setDm(t); });
 
+// 進隧道、地下道時收不到定位：要讓人看得出來，不要默默少算
+function gpsLost() {
+  const now = Date.now();
+  return state === "running" && !simulating && now - startedAt > FIX_TIMEOUT && now - lastFixAt > FIX_TIMEOUT;
+}
+let lostAnnounced = false;
+function isDimHour(ts) { const h = new Date(ts).getHours(); return h >= 18 || h < 6; }
+
 function dmMessage(b) {
   const r = b.r;
   if (booting) return "SELF TEST　自我檢測中";
@@ -912,6 +948,7 @@ function dmMessage(b) {
     return "空車 VACANT　" + PRESETS[preset].name + "　起程 " + r.base + " 元 " + (r.baseDist / 1000) + " 公里　續程每 "
       + r.stepDist + " 公尺 " + r.step + " 元　延滯每 " + r.waitSec + " 秒 " + r.wait + " 元";
   }
+  if (state === "running" && gpsLost()) return "GPS 訊號中斷　里程暫停計算　請移到空曠處";
   if (state === "running") return "歡迎搭乘　請繫好安全帶" + (b.nightFee ? "　夜間加成" : "") + "　祝您旅途愉快";
   if (state === "paused") return "暫停計費　PAUSED";
   return "謝謝搭乘　車資 " + b.total + " 元　請記得您的隨身物品";
@@ -931,6 +968,11 @@ function update() {
   const b = breakdown();
   const big = $("dFare");
   renderRateCard(b.r);
+  document.body.classList.toggle("dim", $("dim").checked && isDimHour(Date.now()));
+  if (gpsLost()) {
+    signal("GPS 訊號中斷", "weak");
+    if (!lostAnnounced) { lostAnnounced = true; badKey(); say("GPS 訊號中斷"); }
+  } else if (lostAnnounced && Date.now() - lastFixAt < FIX_TIMEOUT) lostAnnounced = false;
   setDm(dmMessage(b));
   $("ledSamples").textContent = samples;
   if (booting) {
@@ -1089,7 +1131,8 @@ function hire() {
   tripNo++;
   window.scrollTo({ top: 0, behavior: "smooth" });   // 剛從設定打開試跑模式的話，表頭可能在畫面外
   keyBeep(); beep(2730, 0.055, 0.10, 0.12);
-  say("歡迎搭乘，請繫好安全帶。起程運價 " + b0.total + " 元。");
+  lostAnnounced = false;
+  say("歡迎搭乘，請繫好安全帶。起程運價 " + b0.total + " 元" + (b0.nightFee ? "，含夜間加成" : "") + "。");
   keepAwake(true);
   if (simulating) signal("試跑 · 0 km/h", "sim");
   else {
@@ -1121,7 +1164,24 @@ function pay() {
   keyBeep(); beep(2730, 0.055, 0.10, 0.12); beep(2730, 0.055, 0.10, 0.24);
   say("本次車資 " + b.total + " 元，謝謝搭乘，請記得您的隨身物品。");
   printReceipt(b);
+  shift.trips++; shift.meters += meters; shift.revenue += b.total; shift.sec += (endedAt - startedAt) / 1000;
+  renderShift();
 }
+
+function renderShift() {
+  $("shiftCard").hidden = shift.trips === 0;
+  if (!shift.trips) return;
+  $("shiftTitle").textContent = "這班載了 " + shift.trips + " 趟";
+  $("shRev").textContent = "NT$" + shift.revenue.toLocaleString("zh-TW");
+  $("shKm").textContent = (shift.meters / 1000).toFixed(1) + " km";
+  $("shAvg").textContent = Math.round(shift.revenue / shift.trips) + " 元";
+  const m = Math.floor(shift.sec / 60);
+  $("shTime").textContent = Math.floor(m / 60) + ":" + String(m % 60).padStart(2, "0");
+}
+$("btnShiftClear").addEventListener("click", () => {
+  shift = { trips: 0, meters: 0, revenue: 0, sec: 0 };
+  renderShift();
+});
 
 function clear(silent) {
   if (state === "running" || state === "paused") { badKey(); return; }  // 計費中不能直接歸零
@@ -1149,6 +1209,18 @@ for (const [id, fn] of Object.entries(KEYS)) {
   });
   for (const ev of ["pointerup", "pointerleave", "pointercancel"]) el.addEventListener(ev, () => el.classList.remove("down"));
 }
+
+// 電腦上可以用數字鍵 1–4 按表
+document.addEventListener("keydown", (e) => {
+  if (sheet.open || e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
+  if (e.target.closest?.("input, select, textarea")) return;
+  const id = { "1": "kGo", "2": "kPause", "3": "kPay", "4": "kFree" }[e.key];
+  if (!id) return;
+  e.preventDefault();
+  const el = $(id);
+  el.classList.add("down"); setTimeout(() => el.classList.remove("down"), 120);
+  KEYS[id]();
+});
 
 // 設定面板
 const sheet = $("sheet");
@@ -1195,7 +1267,84 @@ function fmtDate(ts) {
   const d = new Date(ts);
   return d.getFullYear() + "/" + String(d.getMonth() + 1).padStart(2, "0") + "/" + String(d.getDate()).padStart(2, "0");
 }
-let receiptText = "";
+let receiptText = "", receiptData = null;
+
+// 把乘車證明畫成一張圖，傳給朋友用。全部在本機畫，不經過任何伺服器
+const UI_FONT = '"PingFang TC","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif';
+const MONO_FONT = 'ui-monospace,"SF Mono",Menlo,Consolas,' + UI_FONT;
+function receiptImage(d) {
+  const S = 3, W = 340, PW = 244, px = (W - PW) / 2, top = 28, lh = 19;
+  const lines = d.info.length + d.trip.length + d.fees.length;
+  const paperH = 18 + 74 + lines * lh + 3 * 17 + 40 + 28 + 32 + 20;
+  const H = top + paperH + 46;
+  const c = document.createElement("canvas");
+  c.width = W * S; c.height = H * S;
+  const g = c.getContext("2d");
+  g.scale(S, S);
+  g.fillStyle = "#0F1012"; g.fillRect(0, 0, W, H);
+
+  // 紙張＋撕紙鋸齒
+  const bottom = top + paperH;
+  g.beginPath();
+  g.moveTo(px, top); g.lineTo(px + PW, top); g.lineTo(px + PW, bottom - 7);
+  for (let x = px + PW; x > px; x -= 10) { g.lineTo(x - 5, bottom); g.lineTo(Math.max(px, x - 10), bottom - 7); }
+  g.closePath();
+  g.fillStyle = "#F7F5EF"; g.fill();
+
+  const ink = "#1E1C19";
+  const text = (t, x, y, font, align = "left", alpha = 1) => {
+    g.globalAlpha = alpha; g.font = font; g.textAlign = align; g.fillStyle = ink; g.fillText(t, x, y); g.globalAlpha = 1;
+  };
+  const cx = W / 2;
+  let y = top + 18;
+  // 標誌
+  g.fillStyle = ink; g.beginPath(); g.roundRect ? g.roundRect(cx - 13, y, 26, 26, 6) : g.rect(cx - 13, y, 26, 26); g.fill();
+  g.fillStyle = "#F7F5EF"; g.fillRect(cx - 9, y + 8, 18, 10);
+  g.fillStyle = ink; for (const dx of [-6.5, -1.5, 3.5]) g.fillRect(cx + dx, y + 10.5, 3, 5);
+  y += 46;
+  text("乘 車 證 明", cx, y, "800 16px " + UI_FONT, "center");
+  y += 16;
+  text("TAXI RECEIPT · No." + String(d.no).padStart(4, "0"), cx, y, "9.5px " + MONO_FONT, "center", 0.6);
+  y += 10;
+
+  const row = (k, v) => {
+    y += lh;
+    text(k, px + 15, y, "11.5px " + MONO_FONT, "left", 0.75);
+    text(v, px + PW - 15, y, "11.5px " + MONO_FONT, "right");
+  };
+  const rule = () => {
+    y += 11;
+    g.strokeStyle = "rgba(30,28,25,.45)"; g.setLineDash([3, 3]); g.lineWidth = 1;
+    g.beginPath(); g.moveTo(px + 15, y + 0.5); g.lineTo(px + PW - 15, y + 0.5); g.stroke(); g.setLineDash([]);
+    y += 6;
+  };
+  d.info.forEach(([k, v]) => row(k, v)); rule();
+  d.trip.forEach(([k, v]) => row(k, v)); rule();
+  d.fees.forEach(([k, v]) => row(k, v)); rule();
+  y += 28;
+  text("車資", px + 15, y, "800 13px " + UI_FONT);
+  text("NT$" + d.total, px + PW - 15, y, "800 22px " + MONO_FONT, "right");
+  y += 30;
+  text("謝謝搭乘 · 一路平安", cx, y, "700 12px " + UI_FONT, "center");
+  y += 22;
+  text("手機 GPS 估算，好玩用，非正式收據", cx, y, "9.5px " + UI_FONT, "center", 0.55);
+
+  g.globalAlpha = 1; g.font = "600 10.5px " + UI_FONT; g.textAlign = "center"; g.fillStyle = "#6D7581";
+  g.fillText("跳表 TAXI METER · 好玩用的仿真計費表", cx, H - 18);
+  return c;
+}
+const canShareFiles = (() => {
+  try { return !!navigator.canShare && navigator.canShare({ files: [new File([""], "t.png", { type: "image/png" })] }); }
+  catch (_) { return false; }
+})();
+if (canShareFiles) $("btnShare").hidden = false;
+$("btnShare").addEventListener("click", async () => {
+  if (!receiptData) return;
+  const blob = await new Promise((r) => receiptImage(receiptData).toBlob(r, "image/png"));
+  const file = new File([blob], "乘車證明-" + String(receiptData.no).padStart(4, "0") + ".png", { type: "image/png" });
+  try { await navigator.share({ files: [file], title: "乘車證明" }); }
+  catch (_) { /* 使用者取消分享 */ }
+});
 function printReceipt(b) {
   const el = $("receipt");
   const plate = $("plate").value.trim() || "TAX-0520";
@@ -1239,6 +1388,13 @@ function printReceipt(b) {
   el.appendChild(Object.assign(document.createElement("p"), { className: "fine",
     textContent: "手機 GPS 估算，好玩用，非正式收據。沒有存進任何地方，重新整理就會消失。" }));
 
+  receiptData = {
+    no: tripNo, total: b.total,
+    info: [["車號", plate], ["費率", PRESETS[preset].name.replace(/（.*）/, "")], ["日期", fmtDate(startedAt)],
+           ["上車", fmtTime(startedAt)], ["下車", fmtTime(endedAt)]],
+    trip: [["里程", (meters / 1000).toFixed(2) + " km"], ["乘車時間", clock((endedAt - startedAt) / 1000)], ["延滯計時", clock(idleSec)]],
+    fees: rows.map(([k, v]) => [k, v + " 元"])
+  };
   receiptText = [
     "乘車明細（估算）",
     PRESETS[preset].name + " 費率 " + fmtTime(startedAt) + "-" + fmtTime(endedAt),
