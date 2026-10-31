@@ -775,7 +775,8 @@ function audioReady() {
       blank.buffer = ctx.createBuffer(1, 1, 22050);
       blank.connect(ctx.destination); blank.start(0);
     }
-    if (ctx.state === "suspended") ctx.resume();
+    // iPhone 來電、叫 Siri、切到別的 App 回來後會變成 "interrupted"，不只是 "suspended"
+    if (ctx.state !== "running") ctx.resume().catch(() => {});
     return ctx;
   } catch (_) { return null; }
 }
@@ -879,7 +880,9 @@ function say(text) {
 const MAX_ACCURACY = 45;     // 公尺，超過就丟掉這筆定位
 const MAX_SPEED    = 60;     // 公尺/秒，超過視為跳點
 const IDLE_SPEED   = 5 / 3.6;// 時速 5 公里以下開始延滯計時
-const FIX_TIMEOUT  = 12000;  // 太久沒定位就暫停延滯計時
+// 停紅燈時多數手機會停止回報位置（位置沒變就不通知）。這麼久沒有新定位，就當作車子停著，
+// 延滯照算。萬一其實是在隧道裡，出隧道後第一筆定位會把中間的距離一次補回來
+const STILL_AFTER  = 5000;
 
 // idle 空車 → running 載客 ⇄ paused 暫停 → done 收費 → idle
 let state = "idle";
@@ -891,6 +894,7 @@ let lastWaitUnits = 0;
 let sim = { v: 0, target: 0, left: 0 };
 let tripNo = 0;
 let simSec = 0, simFactor = 1;        // 試跑模式的模擬時間與快轉倍數
+let lastTickAt = Date.now();
 // 本班累計：跟計費表的營業統計一樣，只放記憶體
 let shift = { trips: 0, meters: 0, revenue: 0, sec: 0 };
 
@@ -948,12 +952,9 @@ function setDm(text) {
 }
 window.addEventListener("resize", () => { const t = dmCur; dmCur = ""; setDm(t); });
 
-// 進隧道、地下道時收不到定位：要讓人看得出來，不要默默少算
-function gpsLost() {
-  const now = Date.now();
-  return state === "running" && !simulating && now - startedAt > FIX_TIMEOUT && now - lastFixAt > FIX_TIMEOUT;
+function gpsQuiet() {
+  return (state === "running" || state === "paused") && !simulating && lastFixAt > 0 && Date.now() - lastFixAt > STILL_AFTER;
 }
-let lostAnnounced = false;
 function isDimHour(ts) { const h = new Date(ts).getHours(); return h >= 18 || h < 6; }
 
 function dmMessage(b) {
@@ -963,7 +964,7 @@ function dmMessage(b) {
     return "空車 VACANT　" + PRESETS[preset].name + "　起程 " + r.base + " 元 " + (r.baseDist / 1000) + " 公里　續程每 "
       + r.stepDist + " 公尺 " + r.step + " 元　延滯每 " + r.waitSec + " 秒 " + r.wait + " 元";
   }
-  if (state === "running" && gpsLost()) return "GPS 訊號中斷　里程暫停計算　請移到空曠處";
+  if (state === "running" && !simulating && lastFixAt === 0) return "搜尋 GPS 訊號中　請稍候　手機靠近車窗比較快";
   if (state === "running" && simulating) return "試跑模式" + (simFactor > 1 ? "　快轉 " + simFactor + " 倍" : "") + "　歡迎搭乘　請繫好安全帶";
   if (state === "running") return "歡迎搭乘　請繫好安全帶" + (b.nightFee ? "　夜間加成" : "") + "　祝您旅途愉快";
   if (state === "paused") return "暫停計費　PAUSED";
@@ -985,10 +986,7 @@ function update() {
   const big = $("dFare");
   renderRateCard(b.r);
   document.body.classList.toggle("dim", $("dim").checked && isDimHour(Date.now()));
-  if (gpsLost()) {
-    signal("GPS 訊號中斷", "weak");
-    if (!lostAnnounced) { lostAnnounced = true; badKey(); say("GPS 訊號中斷"); }
-  } else if (lostAnnounced && Date.now() - lastFixAt < FIX_TIMEOUT) lostAnnounced = false;
+  if (gpsQuiet()) signal("GPS 無新位置 · 視為停車", "fair");
   setDm(dmMessage(b));
   $("ledSamples").textContent = samples;
   if (booting) {
@@ -1033,6 +1031,7 @@ function update() {
   if (state === "running" && lastFare && b.total !== lastFare) {
     big.classList.remove("tick"); void big.offsetWidth; big.classList.add("tick");
     jumpSound(b.waitUnits > lastWaitUnits);
+    try { navigator.vibrate?.(25); } catch (_) { /* iPhone 不支援震動 */ }
   }
   if (state !== "idle" && state !== "done") { lastFare = b.total; lastWaitUnits = b.waitUnits; }
 }
@@ -1110,6 +1109,7 @@ async function keepAwake(on) {
   } catch (_) { /* 不支援就算了，不影響計費 */ }
 }
 document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && ctx && ctx.state !== "running") ctx.resume().catch(() => {});
   if (document.visibilityState === "visible" && (state === "running" || state === "paused")) keepAwake(true);
 });
 
@@ -1123,9 +1123,13 @@ setInterval(() => {
     }
     simSec += simFactor;
   } else if (state === "running") {
-    const fresh = Date.now() - lastFixAt < FIX_TIMEOUT;
-    if (fresh && curSpeed < IDLE_SPEED) idleSec++;
+    // 手機忙或降速時計時器會延遲，延滯要用實際經過的秒數算，不能每次固定加 1
+    const now = Date.now();
+    const dt = Math.min(60, Math.max(0, (now - lastTickAt) / 1000));
+    if (gpsQuiet()) curSpeed = 0;
+    if (lastFixAt > 0 && curSpeed < IDLE_SPEED) idleSec += dt;
   }
+  lastTickAt = Date.now();
   update();
 }, 1000);
 
@@ -1133,7 +1137,7 @@ setInterval(() => {
 function hire() {
   if (booting) { booting = false; }
   if (state === "paused") {                       // 暫停 → 繼續
-    state = "running"; keyBeep(); say("繼續計費"); update(); return;
+    state = "running"; lastTickAt = Date.now(); keyBeep(); say("繼續計費"); update(); return;
   }
   if (state === "running") { badKey(); return; }
   if (state === "done") clear(true);
@@ -1144,6 +1148,7 @@ function hire() {
   $("err").hidden = true;
   state = "running";
   startedAt = Date.now();
+  lastTickAt = startedAt;
   meters = 0; idleSec = 0; samples = 0; last = null; lastFixAt = 0; curSpeed = 0;
   sim = { v: 0, target: 0, left: 0, first: true };   // 一按載客就開車，不要先停在原地
   simSec = 0;
@@ -1157,7 +1162,6 @@ function hire() {
   tripNo++;
   window.scrollTo({ top: 0, behavior: "smooth" });   // 剛從設定打開試跑模式的話，表頭可能在畫面外
   keyBeep(); beep(2730, 0.055, 0.10, 0.12);
-  lostAnnounced = false;
   say("歡迎搭乘，請繫好安全帶。起程運價 " + b0.total + " 元" + (b0.nightFee ? "，含夜間加成" : "") + "。");
   keepAwake(true);
   if (simulating) signal("試跑 · 0 km/h", "sim");
@@ -1458,6 +1462,19 @@ $("btnCopy").addEventListener("click", async () => {
   catch (_) { label.textContent = "複製失敗，請手動選取"; }
   setTimeout(() => { label.textContent = "複製明細"; }, 2200);
 });
+
+// 加入主畫面時的圖示。iPhone 只認 PNG，所以在本機用 canvas 畫一張，不另外放檔案
+try {
+  const c = document.createElement("canvas"); c.width = c.height = 180;
+  const g = c.getContext("2d"), u = 180 / 32;
+  g.fillStyle = "#FFD400"; g.fillRect(0, 0, 180, 180);
+  g.fillStyle = "#0E1014"; g.beginPath();
+  g.roundRect ? g.roundRect(5 * u, 10 * u, 22 * u, 12 * u, 2.5 * u) : g.rect(5 * u, 10 * u, 22 * u, 12 * u); g.fill();
+  g.fillStyle = "#FF8A1C"; for (const x of [8.5, 14, 19.5]) g.fillRect(x * u, 13.5 * u, 4 * u, 5 * u);
+  const link = document.createElement("link");
+  link.rel = "apple-touch-icon"; link.href = c.toDataURL("image/png");
+  document.head.appendChild(link);
+} catch (_) { /* 畫不出來就用瀏覽器預設 */ }
 
 /* ── 啟動 ─────────────────────────────────────────────── */
 // 必須等所有行程狀態變數宣告完才呼叫，否則 update() 會踩到暫時性死區
