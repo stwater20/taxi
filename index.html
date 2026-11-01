@@ -579,9 +579,21 @@ body.dim .unit,body.dim .placard{filter:brightness(.6) saturate(.9)}
         <label><input type="radio" name="snd" value="off"><span>靜音<small>只看不聽</small></span></label>
       </div>
       <label class="toggle" style="margin-top:6px">
-        <span>語音播報<small id="voiceHint">歡迎搭乘、報車資、提醒隨身物品</small></span>
+        <span>中文語音播報<small id="voiceHint">上車、每公里報車資、塞車、抵達目的地</small></span>
         <input type="checkbox" id="voice" checked>
       </label>
+      <div id="voiceOpts">
+        <div class="seg" role="radiogroup" aria-label="播報多寡">
+          <label><input type="radio" name="voiceMode" value="1"><span>精簡<small>只報上下車</small></span></label>
+          <label><input type="radio" name="voiceMode" value="2" checked><span>標準<small>＋每公里、塞車</small></span></label>
+          <label><input type="radio" name="voiceMode" value="3"><span>詳細<small>＋每次跳表</small></span></label>
+        </div>
+        <div class="grid" style="margin-top:12px">
+          <div class="span2"><label class="fl" for="voiceSel">語音</label><select id="voiceSel"><option value="">自動（挑最自然的中文語音）</option></select></div>
+          <div class="span2"><label class="fl" for="voiceRate">語速 <b id="voiceRateVal" style="color:var(--text-2)">1.0×</b></label>
+            <input type="range" id="voiceRate" min="0.8" max="1.3" step="0.05" value="1" style="width:100%;accent-color:var(--taxi)"></div>
+        </div>
+      </div>
       <button class="btn sm" type="button" id="btnSoundTest" style="margin-top:4px">
         <svg class="i" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4zM15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>
         <span>試聽聲音</span>
@@ -849,31 +861,86 @@ function printerSound(dur) {
    只用裝置內建（localService）的語音。雲端語音會把文字送出去，
    雖然念的只是「歡迎搭乘」，這個專案還是不碰。               */
 const tts = window.speechSynthesis || null;
-function pickVoice() {
-  if (!tts) return null;
-  const local = tts.getVoices().filter(v => v.localService);
-  const by = (re) => local.find(v => re.test(v.lang.replace("_", "-")));
-  return by(/^zh-TW/i) || by(/^zh-Hant/i) || by(/^zh-HK/i) || by(/^cmn/i) || by(/^zh/i) || null;
+const isZh = (v) => /^(zh|cmn|yue)/i.test(v.lang.replace("_", "-"));
+function zhVoices() {
+  if (!tts) return [];
+  // 依自然程度排序：台灣華語 > 繁中 > 其他中文；Premium／Enhanced／Natural 版本優先
+  const score = (v) => {
+    const lang = v.lang.replace("_", "-");
+    let s = /TW|Hant/i.test(lang) ? 100 : /HK/i.test(lang) ? 60 : 40;
+    if (/premium|enhanced|natural|neural|高品質|優化/i.test(v.name)) s += 20;
+    if (/mei-?jia|美佳/i.test(v.name)) s += 10;
+    return s;
+  };
+  return tts.getVoices().filter((v) => v.localService && isZh(v)).sort((a, b) => score(b) - score(a));
 }
-function refreshVoiceHint() {
-  const hint = $("voiceHint");
-  if (!tts) { hint.textContent = "這個瀏覽器不支援語音播報。"; return; }
+function pickVoice() {
+  const list = zhVoices();
+  const want = $("voiceSel").value;
+  return list.find((v) => v.voiceURI === want) || list[0] || null;
+}
+function refreshVoices() {
+  if (!tts) { $("voiceHint").textContent = "這個瀏覽器不支援語音播報。"; $("voiceOpts").hidden = true; return; }
+  const all = tts.getVoices(), list = zhVoices();
+  const sel = $("voiceSel"), keep = sel.value;
+  sel.length = 1;
+  for (const v of list) sel.add(new Option(v.name + "（" + v.lang + "）", v.voiceURI));
+  sel.value = list.some((v) => v.voiceURI === keep) ? keep : "";
   const v = pickVoice();
-  hint.textContent = v
-    ? "使用手機內建語音「" + v.name + "」，不會連網。"
-    : "這台裝置目前找不到內建的中文語音，語音播報會自動略過。";
+  $("voiceHint").textContent = v ? "使用手機內建語音「" + v.name + "」，不會連網"
+    : all.length === 0 ? "使用手機預設的中文語音"           // Android Chrome 常常列不出語音清單，但照樣念得出來
+    : "這台裝置找不到內建的中文語音，語音播報會略過";
 }
 if (tts) {
-  tts.addEventListener?.("voiceschanged", refreshVoiceHint);
-  refreshVoiceHint();
+  tts.addEventListener?.("voiceschanged", refreshVoices);
+  refreshVoices();
 }
-function say(text) {
+$("voiceRate").addEventListener("input", () => { $("voiceRateVal").textContent = Number($("voiceRate").value).toFixed(2).replace(/0$/, "") + "×"; });
+const voiceMode = () => Number(document.querySelector('input[name="voiceMode"]:checked')?.value || 2);
+
+// interrupt：上下車這種重要的話直接插播；行車中的報讀如果前一句還沒念完就略過，不要排隊越念越慢
+function say(text, interrupt = true) {
   if (!tts || !$("voice").checked) return;
-  const v = pickVoice(); if (!v) return;
-  tts.cancel();
+  const all = tts.getVoices();
+  const v = pickVoice();
+  if (!v && all.length > 0) return;     // 有語音清單但沒有內建中文語音：寧可不念，也不用雲端語音
+  if (!interrupt && (tts.speaking || tts.pending)) return;
+  if (interrupt) tts.cancel();
   const u = new SpeechSynthesisUtterance(text);
-  u.voice = v; u.lang = v.lang; u.rate = 1.0; u.pitch = 1.05;
+  if (v) u.voice = v;
+  u.lang = v ? v.lang : "zh-TW";
+  u.rate = Number($("voiceRate").value) || 1;
+  u.pitch = 1.0;
   tts.speak(u);
+  say.last = u;                          // 留個參照，避免某些瀏覽器把念到一半的語音回收掉
+}
+
+// 行車中的播報：跟叫車 App 一樣，每公里報一次車資、塞車時提醒延滯
+let annKm = 0, annIdle = 0;
+function announce(b, jumped) {
+  if (state !== "running") return;
+  const mode = voiceMode();
+  if (mode >= 2) {
+    const km = Math.floor(meters / 1000);
+    if (km > annKm) { annKm = km; say("已行駛 " + km + " 公里，目前車資 " + b.total + " 元。", false); return; }
+    const jam = Math.floor(idleSec / 180);             // 每塞 3 分鐘提醒一次
+    if (jam > annIdle) { annIdle = jam; say("目前塞車中，延滯計時已累計 " + jam * 3 + " 分鐘，目前車資 " + b.total + " 元。", false); return; }
+  }
+  if (mode >= 3 && jumped) say(b.total + " 元", false);
+}
+function fmtMinutes(sec) {
+  const m = Math.max(1, Math.round(sec / 60));
+  return m >= 60 ? Math.floor(m / 60) + " 小時 " + (m % 60) + " 分鐘" : m + " 分鐘";
+}
+function startSpeech(b0, r0) {
+  let t = "您好，歡迎搭乘。行程開始，請繫好安全帶。";
+  if (b0.nightFee) t += r0.nightPct ? "目前為夜間時段，車資加成百分之 " + r0.nightPct + "。" : "目前為夜間時段，每趟加收 " + r0.night + " 元。";
+  if (r0.extra) t += "本趟另有加成 " + r0.extra + " 元。";
+  return t;
+}
+function endSpeech(b) {
+  return "已抵達目的地。本次行程 " + (meters / 1000).toFixed(1) + " 公里，共 " + fmtMinutes((endedAt - startedAt) / 1000)
+    + "，車資 " + b.total + " 元。謝謝搭乘，下車時請注意後方來車，並記得您的隨身物品。";
 }
 
 /* ── 行程狀態（全部只存在記憶體） ──────────────────────── */
@@ -1031,8 +1098,10 @@ function update() {
   if (state === "running" && lastFare && b.total !== lastFare) {
     big.classList.remove("tick"); void big.offsetWidth; big.classList.add("tick");
     jumpSound(b.waitUnits > lastWaitUnits);
+    announce(b, true);
     try { navigator.vibrate?.(25); } catch (_) { /* iPhone 不支援震動 */ }
   }
+  else if (state === "running") announce(b, false);
   if (state !== "idle" && state !== "done") { lastFare = b.total; lastWaitUnits = b.waitUnits; }
 }
 
@@ -1137,7 +1206,7 @@ setInterval(() => {
 function hire() {
   if (booting) { booting = false; }
   if (state === "paused") {                       // 暫停 → 繼續
-    state = "running"; lastTickAt = Date.now(); keyBeep(); say("繼續計費"); update(); return;
+    state = "running"; lastTickAt = Date.now(); keyBeep(); say("繼續計費。"); update(); return;
   }
   if (state === "running") { badKey(); return; }
   if (state === "done") clear(true);
@@ -1162,7 +1231,8 @@ function hire() {
   tripNo++;
   window.scrollTo({ top: 0, behavior: "smooth" });   // 剛從設定打開試跑模式的話，表頭可能在畫面外
   keyBeep(); beep(2730, 0.055, 0.10, 0.12);
-  say("歡迎搭乘，請繫好安全帶。起程運價 " + b0.total + " 元" + (b0.nightFee ? "，含夜間加成" : "") + "。");
+  annKm = 0; annIdle = 0;
+  say(startSpeech(b0, r0));
   keepAwake(true);
   if (simulating) signal("試跑 · 0 km/h", "sim");
   else {
@@ -1175,7 +1245,7 @@ function hire() {
 }
 
 function pause() {
-  if (state === "running") { state = "paused"; curSpeed = 0; keyBeep(); say("暫停計費"); update(); }
+  if (state === "running") { state = "paused"; curSpeed = 0; keyBeep(); say("計費暫停。"); update(); }
   else if (state === "paused") hire();
   else badKey();
 }
@@ -1192,7 +1262,7 @@ function pay() {
   $("note").textContent = "定位已停止，座標未留下";
   update();
   keyBeep(); beep(2730, 0.055, 0.10, 0.12); beep(2730, 0.055, 0.10, 0.24);
-  say("本次車資 " + b.total + " 元，謝謝搭乘，請記得您的隨身物品。");
+  say(endSpeech(b));
   printReceipt(b);
   shift.trips++; shift.meters += meters; shift.revenue += b.total; shift.sec += (endedAt - startedAt) / 1000;
   renderShift();
@@ -1244,7 +1314,7 @@ $("btnSoundTest").addEventListener("click", () => {
   const hint = $("soundHint");
   if (sndMode() === "off") { hint.textContent = "跳表聲目前設成「靜音」，先選「嗶」或「喀」再試。"; return; }
   keyBeep(); jumpSound(false); setTimeout(() => jumpSound(false), 450);
-  say("聲音測試，歡迎搭乘。");
+  say("您好，歡迎搭乘。行程開始，請繫好安全帶。已行駛 3 公里，目前車資 130 元。");
   setTimeout(() => {
     const st = ctx ? ctx.state : "none";
     hint.textContent = st === "running"
