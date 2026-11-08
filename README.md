@@ -1,4 +1,6 @@
-# 跳表 · Taxi Meter
+# 🚕 跳表 · Taxi Meter｜台灣計程車車資估算
+
+**▶ 線上使用：<https://taxi.sectools.tw/>**
 
 用手機 GPS 估算計程車車資的網頁跳表。**沒有伺服器、不連線、不記錄任何位置資料。**
 
@@ -113,11 +115,11 @@ grep -nE "fetch\(|XMLHttpRequest|sendBeacon|WebSocket|localStorage|sessionStorag
 
 ## 使用
 
-打開 <https://your-username.github.io/taxi-meter/>，或：
+打開 <https://taxi.sectools.tw/>，或：
 
 ```bash
-git clone https://github.com/your-username/taxi-meter.git
-cd taxi-meter
+git clone https://github.com/stwater20/taxi.git
+cd taxi
 python3 -m http.server 8000
 ```
 
