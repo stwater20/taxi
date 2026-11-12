@@ -905,7 +905,7 @@ function say(text, interrupt = true) {
   const v = pickVoice();
   if (!v && all.length > 0) return;     // 有語音清單但沒有內建中文語音：寧可不念，也不用雲端語音
   if (!interrupt && (tts.speaking || tts.pending)) return;
-  if (interrupt) tts.cancel();
+  if (interrupt && (tts.speaking || tts.pending)) tts.cancel();   // iPhone 上沒在念還 cancel，下一句偶爾會被吃掉
   const u = new SpeechSynthesisUtterance(text);
   if (v) u.voice = v;
   u.lang = v ? v.lang : "zh-TW";
@@ -956,7 +956,8 @@ let state = "idle";
 let watchId = null, wakeLock = null, simulating = false;
 let startedAt = 0, endedAt = 0;
 let meters = 0, idleSec = 0, samples = 0;
-let last = null, lastFixAt = 0, curSpeed = 0, nightApplied = false, lastFare = 0;
+let anchor = null, lastFixAt = 0, curSpeed = 0, nightApplied = false, lastFare = 0;
+let fixSpeed = 0, rejects = 0, errCode = 0;
 let lastWaitUnits = 0;
 let sim = { v: 0, target: 0, left: 0 };
 let tripNo = 0;
@@ -1118,26 +1119,39 @@ function fail(msg) {
 }
 
 /* ── 定位 ─────────────────────────────────────────────── */
+// 里程怎麼量：
+// 不是每一筆定位都跟上一筆比，而是跟「上一個確定的點（錨點）」比。距離超過 GPS 誤差才算數，
+// 而且一次把整段都算進去。這樣塞車時一秒只走 2–3 公尺也會慢慢累積，不會每一筆都被當成飄移丟掉；
+// 停著不動時，在誤差範圍內飄來飄去也不會被算成里程。
+// 手機有回報都卜勒速度（coords.speed，比位置準很多）時，以它判斷車子有沒有在動。
 function onFix(pos) {
-  const { latitude: lat, longitude: lon, accuracy: acc } = pos.coords;
+  const { latitude: lat, longitude: lon, accuracy: acc, speed } = pos.coords;
   const t = pos.timestamp || Date.now();
   samples++;
   gpsSignal(acc);
+  if (errCode === 2 || errCode === 3) { $("err").hidden = true; errCode = 0; }   // 訊號回來了，收掉暫時性的錯誤
   if (acc > MAX_ACCURACY) { update(); return; }
 
-  if (last && state === "running") {
-    const d = haversine(last, { lat, lon });
-    const dt = (t - last.t) / 1000;
-    if (dt > 0) {
+  const cur = { lat, lon, t };
+  const doppler = Number.isFinite(speed) && speed >= 0 ? speed : null;   // iPhone 無效時給 -1，Chrome 給 null
+  if (!anchor || state !== "running") {
+    anchor = cur;                     // 暫停中錨點跟著走，恢復時才不會把暫停期間的移動一次算進來
+  } else {
+    const d = haversine(anchor, cur);
+    const dt = (t - anchor.t) / 1000;
+    const moving = doppler === null || doppler >= IDLE_SPEED;
+    const gate = doppler !== null ? Math.max(3, acc * 0.3) : Math.max(5, acc);
+    if (dt > 0 && moving && d >= gate) {
       const v = d / dt;
-      const gate = Math.max(4, acc * 0.6);       // 靜止時的 GPS 漂移不算里程
-      if (v <= MAX_SPEED && d >= gate) { meters += d; curSpeed = v; }
-      else if (v <= MAX_SPEED) { curSpeed = 0; }
+      if (v <= MAX_SPEED) { meters += d; fixSpeed = v; anchor = cur; rejects = 0; }
+      else if (++rejects >= 3) { anchor = cur; rejects = 0; }   // 錨點本身可能是跳點，連續被擋三次就換掉
+    } else if (!moving) {
+      anchor = cur;                   // 都卜勒說停著：不算里程，錨點跟著走免得飄移越積越多
+    } else if (dt >= 3) {
+      fixSpeed = Math.min(fixSpeed, d / dt);   // 一直沒離開誤差範圍：速度慢慢降下來，交給延滯計時
     }
   }
-  if (Number.isFinite(pos.coords.speed) && pos.coords.speed !== null) curSpeed = Math.max(0, pos.coords.speed);
-  // 暫停中也要更新最後位置，否則恢復時會把暫停期間移動的距離一次算進來
-  last = { lat, lon, t };
+  curSpeed = doppler !== null ? doppler : fixSpeed;
   lastFixAt = Date.now();
   update();
 }
@@ -1147,6 +1161,7 @@ function onFixError(e) {
     2: "目前抓不到定位訊號。移動到空曠處或靠近窗邊，訊號恢復後會自動接續計算。",
     3: "定位逾時，正在重試。"
   };
+  errCode = e.code;
   fail(map[e.code] || "定位失敗，請重新開始計費。");
   if (e.code === 1 && (state === "running" || state === "paused")) pay();
 }
@@ -1218,7 +1233,7 @@ function hire() {
   state = "running";
   startedAt = Date.now();
   lastTickAt = startedAt;
-  meters = 0; idleSec = 0; samples = 0; last = null; lastFixAt = 0; curSpeed = 0;
+  meters = 0; idleSec = 0; samples = 0; anchor = null; lastFixAt = 0; curSpeed = 0; fixSpeed = 0; rejects = 0;
   sim = { v: 0, target: 0, left: 0, first: true };   // 一按載客就開車，不要先停在原地
   simSec = 0;
   simFactor = simulating ? Number(document.querySelector('input[name="simSpeed"]:checked')?.value || 10) : 1;
@@ -1238,7 +1253,7 @@ function hire() {
   else {
     gpsSignal(null);
     watchId = navigator.geolocation.watchPosition(onFix, onFixError, {
-      enableHighAccuracy: true, maximumAge: 1000, timeout: 15000
+      enableHighAccuracy: true, maximumAge: 1000
     });
   }
   update();
@@ -1255,7 +1270,7 @@ function pay() {
   state = "done";
   endedAt = simulating ? startedAt + simSec * 1000 : Date.now();
   if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
-  last = null;                                   // 立刻丟掉最後一組座標
+  anchor = null;                                 // 立刻丟掉最後一組座標
   keepAwake(false);
   const b = breakdown();
   signal(simulating ? "試跑結束" : "定位已關閉", "off");
@@ -1288,7 +1303,7 @@ function clear(silent) {
   state = "idle";
   if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
   meters = 0; idleSec = 0; samples = 0; startedAt = 0; endedAt = 0;
-  last = null; curSpeed = 0; nightApplied = false; lastFare = 0; lastWaitUnits = 0;
+  anchor = null; curSpeed = 0; nightApplied = false; lastFare = 0; lastWaitUnits = 0;
   $("receipt").hidden = true;
   $("receipt").textContent = "";
   $("receiptActions").hidden = true;
